@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h2>用户管理</h2>
+    <p class="muted">统一管理用户授权、组合、默认模式与配额。</p>
+  </div>
+</section>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if success %}<div class="success">{{ success }}</div>{% endif %}
+
+<section class="card section-card">
+  <h3>全局默认组合（新注册用户）</h3>
+  <form method="post" action="/admin/settings/default-new-user-mode" class="inline-form">
+    <select name="mode">
+      <option value="" {% if not default_new_user_mode %}selected{% endif %}>（不设置）</option>
+      {% for t in tier_order %}
+        {% set mode_val = "tier:" ~ t %}
+        <option value="{{ mode_val }}" {% if default_new_user_mode == mode_val %}selected{% endif %}>
+          {{ tier_label(t) }} ({{ mode_val }})
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit">保存新用户默认组合</button>
+  </form>
+</section>
+
+<section class="card section-card">
+  <h3>待审核申请</h3>
+  {% for r in reqs %}
+    <div class="request-row">
+      <div><b>#{{ loop.index0 }}</b> · {{ r.username }} · {{ r.kind }} · <span class="muted">{{ r.ts }}</span></div>
+      <div class="muted">{{ r.note }}</div>
+      <div class="actions-row">
+        <form method="post" action="/admin/requests/{{ loop.index0 }}/approve" class="inline">
+          <button type="submit">通过</button>
+        </form>
+        <form method="post" action="/admin/requests/{{ loop.index0 }}/reject" class="inline">
+          <button class="btn-muted" type="submit">拒绝</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <div class="muted">暂无申请</div>
+  {% endfor %}
+</section>
+
+<section class="section-card">
+  <h3>用户总览</h3>
+  {% for uname, info in users.items() %}
+    <article class="card user-card">
+      <div class="user-header">
+        <div>
+          <b>{{ uname }}</b>
+          <span class="badge">{{ info.role }}</span>
+          <span class="badge {{ 'ok' if info.authorized else 'warn' }}">授权={{ info.authorized }}</span>
+        </div>
+        <div class="muted">配额：{{ info.gen_quota_remaining if info.gen_quota_remaining != none else "unlimited" }}</div>
+      </div>
+      <div class="muted">档位：{{ info.allowed_tiers|join(", ") or "无" }} · 编辑权限：{{ info.can_edit_image }}</div>
+      {% if info.role != "admin" %}
+        <div class="actions-row">
+          <form method="post" action="/admin/users/{{ uname }}/authorized" class="inline">
+            <input type="hidden" name="authorized" value="{{ 0 if info.authorized else 1 }}" />
+            <button type="submit">{{ "关闭登录" if info.authorized else "允许登录" }}</button>
+          </form>
+          <form method="post" action="/admin/users/{{ uname }}/edit-perm" class="inline">
+            <input type="hidden" name="can_edit_image" value="{{ 0 if info.can_edit_image else 1 }}" />
+            <button class="btn-muted" type="submit">{{ "关闭编辑权限" if info.can_edit_image else "开通编辑权限" }}</button>
+          </form>
+        </div>
+
+        <div class="grid2">
+          <form method="post" action="/admin/users/{{ uname }}/quota" class="card inner-card">
+            <label>生成配额（空=无限制）</label>
+            <input type="text" name="quota_raw" placeholder="例如 20" />
+            <button type="submit">保存配额</button>
+          </form>
+
+          <form method="post" action="/admin/users/{{ uname }}/default-mode" class="card inner-card">
+            <label>用户默认组合</label>
+            <select name="mode">
+              <option value="" {% if not info.default_gen_mode %}selected{% endif %}>（不设置）</option>
+              {% for t in info.allowed_tiers %}
+                {% set mode_val = "tier:" ~ t %}
+                <option value="{{ mode_val }}" {% if info.default_gen_mode == mode_val %}selected{% endif %}>
+                  档位 · {{ tier_label(t) }} ({{ mode_val }})
+                </option>
+              {% endfor %}
+              {% for p in info.approved_presets %}
+                {% set mode_val = "preset:" ~ p.id %}
+                <option value="{{ mode_val }}" {% if info.default_gen_mode == mode_val %}selected{% endif %}>
+                  组合 · {{ p.label }} ({{ mode_val }})
+                </option>
+              {% endfor %}
+            </select>
+            <button type="submit">保存默认组合</button>
+          </form>
+        </div>
+
+        <form method="post" action="/admin/users/{{ uname }}/tiers" class="card inner-card">
+          <label>档位授权</label>
+          <div class="checks-row">
+            {% for t in tier_order %}
+              <label class="check-pill"><input type="checkbox" name="tiers" value="{{ t }}" {% if t in info.allowed_tiers %}checked{% endif %}/> {{ tier_label(t) }}</label>
+            {% endfor %}
+          </div>
+          <button type="submit">保存档位</button>
+        </form>
+
+        {% if info.approved_presets %}
+        <form method="post" action="/admin/users/{{ uname }}/remove-preset" class="inline-form">
+          <select name="preset_id">
+            {% for p in info.approved_presets %}
+              <option value="{{ p.id }}">{{ p.label }} ({{ p.id }})</option>
+            {% endfor %}
+          </select>
+          <button class="btn-muted" type="submit">移除已获批组合</button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="/admin/users/{{ uname }}/add-preset" class="card inner-card">
+          <label>管理员手动下发组合名称</label>
+          <input type="text" name="preset_label" placeholder="例如：论文图-低成本稳定版" />
+          <label>组合配置(JSON)</label>
+          <textarea name="preset_config_json" rows="6" placeholder='{"exp_mode":"demo_planner_critic","retrieval_setting":"auto","num_candidates":1,"aspect_ratio":"16:9","max_critic_rounds":2,"main_model_name":"openrouter/google/gemini-2.5-flash","image_gen_model_name":"openrouter/google/gemini-2.5-flash-image-preview","max_refine_resolution":"2K"}'></textarea>
+          <button type="submit">手动下发组合</button>
+        </form>
+
+        <form method="post" action="/admin/users/{{ uname }}/delete" class="card inner-card danger-zone">
+          <label>危险操作：删除用户并清理全部数据</label>
+          <input type="text" name="confirm_username" placeholder="输入 {{ uname }} 确认" />
+          <label><input type="checkbox" name="confirm_irreversible" value="1" /> 我确认该操作不可恢复</label>
+          <button type="submit">删除用户</button>
+        </form>
+      {% endif %}
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}
+

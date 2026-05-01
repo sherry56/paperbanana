@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200" viewBox="0 0 360 200">
+  <rect width="360" height="200" fill="#fafafa" stroke="#e5e5e5" stroke-width="1"/>
+  <text x="16" y="28" font-family="Georgia, serif" font-size="13" fill="#1a1a1a">Figure sketch · Ablation bars</text>
+  <g transform="translate(40, 52)">
+    <rect x="0" y="80" width="36" height="48" fill="#93c5fd" stroke="#1e40af" stroke-width="1"/>
+    <rect x="52" y="56" width="36" height="72" fill="#86efac" stroke="#166534" stroke-width="1"/>
+    <rect x="104" y="40" width="36" height="88" fill="#fcd34d" stroke="#b45309" stroke-width="1"/>
+    <rect x="156" y="24" width="36" height="104" fill="#fca5a5" stroke="#991b1b" stroke-width="1"/>
+    <line x1="-8" y1="128" x2="220" y2="128" stroke="#404040" stroke-width="1"/>
+    <text x="18" y="148" text-anchor="middle" font-size="9" fill="#525252">A</text>
+    <text x="70" y="148" text-anchor="middle" font-size="9" fill="#525252">B</text>
+    <text x="122" y="148" text-anchor="middle" font-size="9" fill="#525252">C</text>
+    <text x="174" y="148" text-anchor="middle" font-size="9" fill="#525252">Ours</text>
+  </g>
+  <text x="280" y="100" font-family="Arial, sans-serif" font-size="10" fill="#737373">‘ metric</text>
+  <text x="16" y="188" font-family="Georgia, serif" font-size="10" fill="#a3a3a3">Publication-quality charts · wireframe</text>
+</svg>

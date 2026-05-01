@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-split">
+  <div class="login-brand">
+    <div class="login-logo">PaperFigure</div>
+    <div class="login-tagline">Connect your paper ideas with clean, consistent figures.</div>
+    <div class="muted login-sub">
+      学术示意图生成工作台。已接入 Sub2API 单点登录，不再提供独立注册。
+    </div>
+  </div>
+
+  <div class="login-card">
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if show_local_login %}
+    <form method="post" action="/login" class="login-form">
+      <label class="login-label">用户名
+        <input class="login-input" name="username" autocomplete="username" required />
+      </label>
+      <label class="login-label">密码
+        <div class="pass-wrap login-pass">
+          <input class="login-input" id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+          <button id="togglePwdBtn" class="eye-btn" type="button" aria-label="toggle password">
+            <span id="eyeText">◉</span>
+          </button>
+        </div>
+      </label>
+      <button class="login-btn" type="submit">登录 · Sign in</button>
+    </form>
+    {% else %}
+    <div class="muted">请从 Sub2API 控制台侧边栏点击“科研绘图”进入。</div>
+    {% endif %}
+  </div>
+</section>
+<script>
+  (function () {
+    const togglePwdBtn = document.getElementById("togglePwdBtn");
+    const loginPassword = document.getElementById("loginPassword");
+    const eyeText = document.getElementById("eyeText");
+    if (!togglePwdBtn || !loginPassword || !eyeText) return;
+    togglePwdBtn.addEventListener("click", () => {
+      const isPwd = loginPassword.type === "password";
+      loginPassword.type = isPwd ? "text" : "password";
+      eyeText.textContent = isPwd ? "◎" : "◉";
+    });
+  })();
+</script>
+{% endblock %}

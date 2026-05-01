@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title or "PaperFigure" }}</title>
+  <script>
+    (function () {
+      var inIframe = false;
+      try {
+        inIframe = window.self !== window.top;
+      } catch (e) {
+        inIframe = true;
+      }
+      if (inIframe) {
+        document.documentElement.classList.add("pb-embed");
+      }
+    })();
+  </script>
+  <link rel="icon" type="image/png" href="/static/title_pic/title.png" />
+  <link rel="apple-touch-icon" href="/static/title_pic/title.png" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar shell">
+    <div class="brand-wrap">
+      <div class="brand">PaperFigure</div>
+      <div class="brand-sub">Scientific Figure Workflow Platform</div>
+    </div>
+    <nav class="topnav">
+      {% if user %}
+      {% if user.role != "admin" %}
+      <span class="top-chip">额度：{{ user.gen_quota_remaining if user.gen_quota_remaining != none else "unlimited" }}</span>
+      {% endif %}
+      <span class="top-chip">{{ "管理员" if user.role == "admin" else "普通用户" }}</span>
+      <a class="nav-link" href="/">生成中心</a>
+      {% if user.role == "admin" and not hide_account_features %}<a class="nav-link" href="/admin/users">用户管理</a>{% endif %}
+      <a class="nav-link danger-link" href="/logout">退出</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="container shell">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

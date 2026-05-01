@@ -1,0 +1,936 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h2>生成中心</h2>
+    <p class="muted">
+      当前用户：<b>{{ user.username }}</b>
+      {% if user.role != "admin" %}
+      · 剩余次数：<b>{{ user.gen_quota_remaining if user.gen_quota_remaining != none else "unlimited" }}</b>
+      {% endif %}
+      · 当前单次价格：{{ '%.2f'|format(generation_unit_price) }} 元/次。
+    </p>
+  </div>
+</section>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if success %}<div class="success">{{ success }}</div>{% endif %}
+{% if pending_job_finish_url %}
+<div class="success flash-banner-pending">
+  检测到未领取的生成结果。
+  <a class="nav-link" href="{{ pending_job_finish_url }}">领取并查看候选图</a>
+</div>
+{% endif %}
+<section class="research-top-note card">
+  <div class="research-top-note-title">一键生成SCI配色的论文框架图和统计图</div>
+  <div class="muted">当前单次价格：{{ '%.2f'|format(generation_unit_price) }} 元/次。</div>
+</section>
+
+<section class="section-switcher">
+  <button class="switch-btn active" type="button" data-target="panel-generate">生成配置</button>
+  <button class="switch-btn" type="button" data-target="panel-library">我的图库</button>
+  {% if not hide_account_features %}
+  <button class="switch-btn" type="button" data-target="panel-account">账号与申请</button>
+  {% endif %}
+  {% if results %}
+  <button class="switch-btn" type="button" data-target="panel-results">候选结果</button>
+  {% endif %}
+</section>
+<div class="muted panel-hint">已支持记忆当前面板，刷新页面后自动回到上次位置。</div>
+<section class="sub-nav">
+  <a href="javascript:void(0)" data-target="panel-generate">输入参数</a>
+  <a href="javascript:void(0)" data-target="panel-library">图库管理</a>
+  {% if not hide_account_features %}
+  <a href="javascript:void(0)" data-target="panel-account">申请与账号</a>
+  {% endif %}
+  {% if results %}<a href="javascript:void(0)" data-target="panel-results">结果浏览</a>{% endif %}
+</section>
+
+<section id="panel-generate" class="switch-panel active">
+  <section class="card section-card">
+    <h3>典型场景与版式参考</h3>
+    <div class="grid3">
+      {% for c in showcase_cards %}
+        <div class="gallery-item">
+          {% if c.image_url %}
+            <img
+              src="{{ c.image_url }}"
+              class="gallery-thumb gallery-thumb--contain"
+              alt="{{ c.title }}"
+              loading="lazy"
+              decoding="async"
+            />
+          {% else %}
+            <div class="wireframe-box">Wireframe · 您的图库预览</div>
+          {% endif %}
+          <div class="candidate-title">{{ c.title }}</div>
+          <div class="muted">{{ c.desc }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="layout-main">
+  <form
+    id="generateForm"
+    method="post"
+    action="/generate"
+    class="card section-card"
+    data-estimated-sec="{{ gen_estimated_seconds }}"
+  >
+    <h3>输入与参数</h3>
+    <p class="muted">可先加载参考模板再改写，通常可以提升结构稳定性与出图一致性。</p>
+    <div class="grid2">
+      <label>Load Example (Method)
+        <select id="methodExampleSelector">
+          <option value="">（不加载）</option>
+          {% for item in example_method_options %}
+            <option value="{{ item }}">{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Load Example (Caption)
+        <select id="captionExampleSelector">
+          <option value="">（不加载）</option>
+          {% for item in example_caption_options %}
+            <option value="{{ item }}">{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <label>方法内容
+      <textarea id="methodContentInput" name="method_content" rows="9" required placeholder="粘贴论文方法描述或结构化提示词"></textarea>
+    </label>
+    <div class="card inner-card" style="margin-top:10px;">
+      <label style="display:flex; align-items:center; gap:10px;">
+        <input
+          type="checkbox"
+          id="optimizeMethodContent"
+          name="optimize_method_content"
+          value="1"
+          {% if not (user.role == "admin" or user.can_optimize_method) %}disabled{% endif %}
+        />
+        开启方法内容优化（调用 GPT-5.3，把内容整理为更聚焦 Markdown；默认关闭）
+      </label>
+      {% if not (user.role == "admin" or user.can_optimize_method) %}
+      <div class="muted" style="margin-top:8px;">当前账号未开通方法优化权限，请联系管理员。</div>
+      {% endif %}
+    </div>
+    <label>图注
+      <textarea id="captionInput" name="caption" rows="4" placeholder="可选：图标题或图说明"></textarea>
+    </label>
+    {% if user.role == "admin" %}
+    <label>生成模式（由管理员分配）
+      <select name="generation_mode" id="generationModeSelect">
+        {% for m in available_modes %}
+          <option value="{{ m.id }}" {% if selected_mode == m.id %}selected{% endif %}>{{ m.label }}</option>
+        {% endfor %}
+        <option value="custom">自定义组合（手动）</option>
+      </select>
+    </label>
+    <div class="muted" id="customModeHint" style="display:none;">当前为自定义组合模式：将按下方参数运行生成。</div>
+    <div id="adminCustomConfig" style="display:none;">
+    <div class="grid3">
+      <label>模式
+        <select name="exp_mode">
+          <option value="demo_planner_critic">demo_planner_critic</option>
+          <option value="demo_full">demo_full</option>
+        </select>
+      </label>
+      <label>检索
+        <select name="retrieval_setting">
+          <option value="auto">auto</option>
+          <option value="manual">manual</option>
+          <option value="random">random</option>
+          <option value="none">none</option>
+        </select>
+      </label>
+      <label>候选数<input name="num_candidates" type="number" min="1" max="20" value="1" /></label>
+    </div>
+    <div class="grid3">
+      <label>宽高比
+        <select name="aspect_ratio">
+          <option value="16:9">16:9</option>
+          <option value="21:9">21:9</option>
+          <option value="3:2">3:2</option>
+        </select>
+      </label>
+      <label>Critic轮数<input name="max_critic_rounds" type="number" min="1" max="5" value="3" /></label>
+      <label>主模型<input name="main_model_name" placeholder="留空按配置默认" /></label>
+    </div>
+    <label>生图模型<input name="image_gen_model_name" placeholder="留空按配置默认" /></label>
+    </div>
+    {% else %}
+    <p class="muted">普通用户仅需填写方法内容与图注，系统将自动使用管理员分配的默认配置。</p>
+    {% endif %}
+    <div class="card inner-card gen-time-panel">
+      <div class="muted">
+        {% if gen_last_actual_seconds %}
+        上次实际生成耗时：<b>{{ gen_last_actual_label }}</b>。
+        {% endif %}
+        预计本次生成耗时：<b>{{ gen_estimated_label }}</b>
+        {% if not gen_last_actual_seconds %}
+        <span class="muted">（尚无记录，按 3–4 分钟随机估计）</span>
+        {% else %}
+        <span class="muted">（预计以下次提交前最近一次成功生成的实际耗时为准）</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="actions-row">
+      <button type="submit" id="generateSubmitBtn">运行生成</button>
+      {% if not hide_account_features %}
+      <button type="button" class="btn-muted" id="jumpToAccountBtn">去申请次数</button>
+      {% endif %}
+    </div>
+    <div id="genRunningBanner" class="gen-running-banner" hidden>
+      <span id="genCountdownText"></span>
+    </div>
+  </form>
+
+  <aside class="card section-card compact-help">
+    <h3>使用建议</h3>
+    <div class="muted">1) 先参考模板写作风格再改写自己的方法内容。</div>
+    <div class="muted">2) 每次提交消耗 1 次（按管理员配置价格购买）。</div>
+    <div class="muted">3) 生成后可切换到“候选结果”查看大图。</div>
+  </aside>
+  </section>
+</section>
+
+<section id="panel-library" class="switch-panel">
+  <section class="card section-card">
+    <h3>我的图库</h3>
+    <div class="muted">点击图片可查看原图；下载按钮会直接保存 PNG。</div>
+    <div class="actions-row gallery-toolbar">
+      <input type="text" id="gallerySearchInput" placeholder="按ID或时间搜索" />
+      <select id="gallerySortSelect">
+        <option value="newest">按时间：最新优先</option>
+        <option value="oldest">按时间：最早优先</option>
+        <option value="id_asc">按ID：升序</option>
+        <option value="id_desc">按ID：降序</option>
+      </select>
+      <button type="button" class="btn-muted" id="galleryPrevBtn">上一页</button>
+      <button type="button" class="btn-muted" id="galleryNextBtn">下一页</button>
+      <span class="muted" id="galleryPageInfo">第 1 页</span>
+    </div>
+    <div class="gallery-grid">
+    {% for g in gallery_items %}
+      <div class="gallery-item">
+        <a href="/gallery/image/{{ g.id }}" target="_blank">
+          <img
+            class="gallery-thumb gallery-thumb--contain gallery-thumb--large"
+            src="/gallery/image/{{ g.id }}"
+            alt="{{ g.id }}"
+            loading="lazy"
+            decoding="async"
+          />
+        </a>
+        <div class="mono">{{ g.id }}</div>
+        <div class="muted">{{ g.ts }}</div>
+        <div class="actions-row gallery-item-actions">
+          <a class="mini-link gallery-action-link" href="/gallery/download/{{ g.id }}">下载 PNG</a>
+          <form method="post" action="/gallery/delete/{{ g.id }}" class="inline">
+            <button type="submit" class="btn-danger gallery-action-btn">删除</button>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <div class="muted">暂无内容</div>
+    {% endfor %}
+    </div>
+  </section>
+</section>
+
+{% if not hide_account_features %}
+<section id="panel-account" class="switch-panel">
+  <section class="layout-main">
+    <aside class="card section-card">
+      {% if user.role != "admin" %}
+      <h3>申请次数（人工审核授权）</h3>
+      <form id="quotaApplyForm" method="post" action="/billing/create-order" class="inline-form">
+        {% set ns = namespace(times=1, found=false) %}
+        {% for pkg in price_packages %}
+          {% if (not ns.found) and pkg.label %}
+            {% set ns.times = pkg.times | default(1) %}
+            {% set ns.found = true %}
+          {% endif %}
+        {% endfor %}
+        <input type="hidden" name="buy_times" id="applyTimesInput" value="{{ ns.times }}" />
+        {# pay_channel由下方二维码类型单选控制 #}
+        <label>备注（选填）
+          <input id="payerNoteInput" type="text" name="payer_note" placeholder="如：转账后四位、转账时间" />
+        </label>
+        <div class="user-sub-tabs">
+          <button type="button" class="user-sub-tab-btn active" data-target="user_tab_pay">支付码与留言</button>
+          <button type="button" class="user-sub-tab-btn" data-target="user_tab_price">价目表</button>
+        </div>
+
+        <div id="user_tab_pay" class="user-sub-panel active">
+          <div class="card inner-card">
+            <div class="candidate-title">二维码类型</div>
+            <div class="muted" style="margin-top:6px;">选择后将展示对应二维码，并在提交申请时写入 `pay_channel`。</div>
+            <input type="hidden" name="pay_channel" id="pay_channel_input" value="customer_service_wechat" />
+            <div style="margin-top:12px;">
+              <label style="margin:0;">
+                下拉选择支付/联系码
+                <select id="payChannelSelect">
+                  <option value="customer_service_wechat" selected>客服微信码（联系方式）</option>
+                  <option value="wechat">微信支付码</option>
+                  <option value="alipay">支付宝支付码</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="card inner-card" style="margin-top:12px;">
+            <div class="candidate-title">留言（支付方式建议）</div>
+            <textarea
+              name="user_message"
+              rows="5"
+              placeholder="例如：建议使用微信转账/备注含手机号后四位/尽量走某渠道等。"
+              style="margin-top:8px;"
+            ></textarea>
+            <div class="muted" style="margin-top:10px;">管理员可在申请管理中查看/删除这些建议，并进行统计。</div>
+          </div>
+
+          <div class="card inner-card" style="margin-top:12px;">
+            <div class="candidate-title" id="paymentPreviewTitle">二维码预览（支付用）</div>
+            <img
+              id="paymentPreviewImg"
+              src="{{ customer_service_wechat_qr_image_url or '' }}"
+              class="gallery-thumb gallery-thumb--contain result-ref-thumb"
+              loading="lazy"
+              decoding="async"
+              style="display:none;"
+            />
+            <div class="muted" style="margin-top:10px;">
+              支付后请在备注中填写注册名称（{{ user.username }}），便于管理员核对授权。
+            </div>
+          </div>
+        </div>
+
+        <div id="user_tab_price" class="user-sub-panel">
+          <div class="card inner-card">
+            <div class="candidate-title">申请组合（套餐 / 自定义次数）</div>
+            <div class="muted">
+              单价 {{ '%.2f'|format(generation_unit_price) }} 元/次（套餐总价如未配置将默认=单价×次数）
+            </div>
+
+            <div style="margin-top:12px; margin-bottom:12px;">
+              <label class="price-package-row" style="align-items:center;">
+                <input type="radio" name="price_package_id" id="price_package_custom_radio" value="custom" />
+                <span>自定义次数</span>
+                <span class="mono">单价×次数</span>
+              </label>
+              <div class="muted" style="margin-top:8px;">
+                次数：
+                <input
+                  type="number"
+                  id="customBuyTimesInput"
+                  class="custom-times-input"
+                  min="1"
+                  step="1"
+                  value="1"
+                  disabled
+                />
+              </div>
+            </div>
+
+            <div class="price-package-list">
+              {% set ns = namespace(has_pkg=false) %}
+              {% for pkg in price_packages %}
+                {% if pkg.label %}
+                  {% set total_yuan = (pkg.price_yuan if pkg.price_yuan is not none else generation_unit_price * pkg.times) %}
+                  <label class="price-package-row">
+                    <input
+                      type="radio"
+                      name="price_package_id"
+                      value="{{ pkg.id }}"
+                      data-times="{{ pkg.times }}"
+                      data-total-yuan="{{ '%.2f'|format(total_yuan) }}"
+                      {% if not ns.has_pkg %}checked{% set ns.has_pkg = true %}{% endif %}
+                    />
+                    <span>{{ pkg.label }}</span>
+                    <span class="mono">×{{ pkg.times }} · {{ '%.2f'|format(total_yuan) }} 元</span>
+                  </label>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <button type="button" id="openPaymentModalBtn">去支付并提交申请</button>
+      </form>
+      <div class="muted">选择套餐后将提交相应申请次数；管理员审核通过后手动增加次数。</div>
+      {% if recent_orders %}
+        <div class="card inner-card">
+          <label>最近申请</label>
+          <div class="actions-row">
+            <select id="orderFilterSelect">
+              <option value="all">全部</option>
+              <option value="created">仅已申请</option>
+              <option value="paid">仅已授权</option>
+              <option value="closed">仅已驳回</option>
+            </select>
+          </div>
+          {% for o in recent_orders %}
+            <details class="request-row user-order-row" data-status="{{ o.status }}">
+              <summary><b>{{ o.order_no }}</b> · {{ o.status_label }} · {{ o.buy_times }}次</summary>
+              <div class="muted">渠道 {{ o.pay_channel or "-" }} · 金额 {{ o.total_amount_yuan }} 元 · 提交 {{ o.created_at }}</div>
+              {% if o.payer_note %}
+              <div class="muted">备注：{{ o.payer_note }}</div>
+              {% endif %}
+            </details>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if user_message_rows %}
+        <div class="card inner-card" style="margin-top:14px;">
+          <label>留言管理（最近）</label>
+          <div class="muted" style="margin-top:6px; margin-bottom:10px;">
+            本页展示最近 {{ user_message_rows|length }} 条留言，以及管理员的反馈（如有）。
+          </div>
+          {% for m in user_message_rows %}
+            <details class="request-row" style="margin:0;">
+              <summary>
+                订单 {{ m.order_no }} · {{ m.order_status_label or "-" }}
+              </summary>
+              <div class="payload-pre" style="margin-top:10px;">
+                用户留言：{{ m.content }}
+              </div>
+              {% if m.admin_reply %}
+                <div class="payload-pre" style="margin-top:10px; border-color:#cde3ff;">
+                  管理员反馈：{{ m.admin_reply }}
+                </div>
+              {% endif %}
+              <div class="muted" style="margin-top:8px;">
+                时间：{{ m.created_at }}{% if m.admin_reply_at %}（反馈：{{ m.admin_reply_at }}）{% endif %}
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% endif %}
+    </aside>
+    <aside class="card section-card">
+      <h3>账号安全</h3>
+      <div class="card inner-card">
+        <div class="muted">用户名：{{ user.username }}</div>
+        <div class="muted">角色：{{ user.role }}</div>
+        <div class="muted">剩余额度：{{ user.gen_quota_remaining if user.gen_quota_remaining != none else "unlimited" }}</div>
+        <div class="muted">默认模式：{{ user.default_gen_mode or "未设置" }}</div>
+      </div>
+      {% if pwd_msg %}
+        <div class="{{ 'success' if '成功' in pwd_msg else 'error' }}">{{ pwd_msg }}</div>
+      {% endif %}
+      <form method="post" action="/account/change-password">
+        <label>当前密码<input type="password" name="current_password" required /></label>
+        <label>新密码<input type="password" name="new_password" required /></label>
+        <label>确认新密码<input type="password" name="new_password_confirm" required /></label>
+        <button type="submit">更新密码</button>
+      </form>
+    </aside>
+  </section>
+</section>
+{% endif %}
+
+{% if results %}
+<section id="panel-results" class="card section-card switch-panel">
+  <div class="results-head">
+    <h3>候选结果</h3>
+    <div class="actions-row">
+      <form method="post" action="/gallery/save-all">
+        <button type="submit">全部保存到图库</button>
+      </form>
+      <a class="nav-link" href="/results/download-zip">打包下载 ZIP</a>
+      <button type="button" class="btn-muted" id="resultsPrevPageBtn">上一页</button>
+      <button type="button" class="btn-muted" id="resultsNextPageBtn">下一页</button>
+      <span class="muted" id="resultsPageInfo">第 1 页</span>
+      <button type="button" class="btn-muted" id="previewPrevBtn">上一张</button>
+      <button type="button" class="btn-muted" id="previewNextBtn">下一张</button>
+      <button type="button" class="btn-muted" id="openFirstPreviewBtn">快速预览第一张</button>
+    </div>
+  </div>
+  <div class="card inner-card">
+    <label>参考图（用于对照）</label>
+    <div class="result-ref-grid">
+      {% for ref in result_reference_images %}
+        <a href="{{ ref }}" target="_blank">
+          <img src="{{ ref }}" class="gallery-thumb gallery-thumb--contain result-ref-thumb" loading="lazy" decoding="async" />
+        </a>
+      {% else %}
+        <div class="muted">当前无可用参考图</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="grid2" id="resultsGrid">
+  {% for r in results %}
+    <div class="candidate-card js-result-card">
+      <div class="candidate-title">候选 #{{ r.candidate_id }}</div>
+      <img
+        src="/results/image/{{ r.candidate_id }}"
+        class="preview preview-large js-preview-image"
+        data-image-src="/results/image/{{ r.candidate_id }}"
+        alt="候选 {{ r.candidate_id }}"
+        loading="lazy"
+        decoding="async"
+      />
+      <div class="actions-row">
+        <button type="button" class="btn-muted js-open-preview" data-image-src="/results/image/{{ r.candidate_id }}">查看大图</button>
+        <a class="nav-link" href="/results/download/{{ r.candidate_id }}">下载 PNG</a>
+        <form method="post" action="/results/discard/{{ r.candidate_id }}" class="inline">
+          <button type="submit" class="btn-danger">删除候选</button>
+        </form>
+      </div>
+      {% if user.role == "admin" %}
+      <form method="post" action="/gallery/save">
+        <input type="hidden" name="candidate_id" value="{{ r.candidate_id }}" />
+        <button type="submit">保存到图库</button>
+      </form>
+      {% else %}
+      <div class="muted">普通用户不显示提交图片入口</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+<div id="imagePreviewModal" class="image-modal">
+  <div class="image-modal-backdrop" data-close-modal="1"></div>
+  <div class="image-modal-content">
+    <div class="image-modal-head">
+      <div class="muted" id="imagePreviewIndex">预览</div>
+      <div class="actions-row">
+        <button type="button" class="btn-muted" id="modalPrevBtn">上一张</button>
+        <button type="button" class="btn-muted" id="modalNextBtn">下一张</button>
+        <button type="button" class="image-modal-close" data-close-modal="1">关闭</button>
+      </div>
+    </div>
+    <img id="imagePreviewModalImg" src="" alt="预览图" />
+  </div>
+</div>
+<div id="paymentModal" class="image-modal">
+  <div class="image-modal-backdrop" data-close-pay-modal="1"></div>
+  <div class="image-modal-content">
+    <div class="image-modal-head">
+    <div class="muted" id="paymentModalTitle">客服微信码支付</div>
+      <div class="actions-row">
+        <button type="button" class="image-modal-close" data-close-pay-modal="1">关闭</button>
+      </div>
+    </div>
+    <img id="paymentModalImg" src="" alt="客服微信码" />
+    <div class="muted" style="margin-top:10px;">
+      请在支付备注中填写注册名称：<b>{{ user.username }}</b>，便于管理员核对授权。
+    </div>
+    <div class="muted" id="paymentAmountHint"></div>
+    <div class="actions-row" style="margin-top:12px;">
+      <button type="button" class="btn-muted" data-close-pay-modal="1">我再检查一下</button>
+      <button type="button" id="submitAfterPaidBtn">我已支付，提交申请</button>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const methodMap = {{ example_methods_json|safe }};
+    const captionMap = {{ example_captions_json|safe }};
+    const methodSel = document.getElementById("methodExampleSelector");
+    const captionSel = document.getElementById("captionExampleSelector");
+    const methodInput = document.getElementById("methodContentInput");
+    const captionInput = document.getElementById("captionInput");
+    if (methodSel && methodInput) {
+      methodSel.addEventListener("change", () => {
+        const key = methodSel.value || "";
+        methodInput.value = key && Object.prototype.hasOwnProperty.call(methodMap, key) ? methodMap[key] : "";
+      });
+    }
+    if (captionSel && captionInput) {
+      captionSel.addEventListener("change", () => {
+        const key = captionSel.value || "";
+        captionInput.value = key && Object.prototype.hasOwnProperty.call(captionMap, key) ? captionMap[key] : "";
+      });
+    }
+
+    // User panel sub-tabs (inside panel-account)
+    const userTabBtns = Array.from(document.querySelectorAll(".user-sub-tab-btn"));
+    const userPanels = Array.from(document.querySelectorAll(".user-sub-panel"));
+    const showUserPanel = (id) => {
+      userPanels.forEach((p) => p.classList.toggle("active", p.id === id));
+      userTabBtns.forEach((b) => b.classList.toggle("active", b.dataset.target === id));
+    };
+    if (userTabBtns.length && userPanels.length) {
+      userTabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => showUserPanel(btn.dataset.target));
+      });
+    }
+    const generationModeSelect = document.getElementById("generationModeSelect");
+    const adminCustomConfig = document.getElementById("adminCustomConfig");
+    const customModeHint = document.getElementById("customModeHint");
+    const toggleAdminCustomConfig = () => {
+      if (!generationModeSelect || !adminCustomConfig) return;
+      const isCustom = generationModeSelect.value === "custom";
+      adminCustomConfig.style.display = isCustom ? "" : "none";
+      if (customModeHint) customModeHint.style.display = isCustom ? "" : "none";
+    };
+    if (generationModeSelect) {
+      generationModeSelect.addEventListener("change", toggleAdminCustomConfig);
+      toggleAdminCustomConfig();
+    }
+    // 生成中：倒计时 + 禁用提交，避免重复点击
+    const genForm = document.getElementById("generateForm");
+    const genSubmitBtn = document.getElementById("generateSubmitBtn");
+    const genRunningBanner = document.getElementById("genRunningBanner");
+    const genCountdownText = document.getElementById("genCountdownText");
+    if (genForm && genSubmitBtn) {
+      genForm.addEventListener("submit", function (ev) {
+        if (genSubmitBtn.getAttribute("data-generating") === "1") {
+          ev.preventDefault();
+          return;
+        }
+        genSubmitBtn.setAttribute("data-generating", "1");
+        genSubmitBtn.disabled = true;
+        genSubmitBtn.textContent = "提交中…";
+        if (genRunningBanner) genRunningBanner.hidden = false;
+        if (genCountdownText) {
+          genCountdownText.textContent =
+            "正在提交任务，随后将跳转到「生成进行中」页面（短连接轮询，不会因长时间生成而断线）…";
+        }
+      });
+    }
+    const switchBtns = Array.from(document.querySelectorAll(".switch-btn"));
+    const subNavLinks = Array.from(document.querySelectorAll(".sub-nav [data-target]"));
+    const panels = Array.from(document.querySelectorAll(".switch-panel"));
+    const tabStorageKey = "paperfigure_active_panel";
+    const safePanelId = (id) => panels.some((p) => p.id === id) ? id : "panel-generate";
+    const showPanel = (id) => {
+      const finalId = safePanelId(id);
+      panels.forEach((p) => p.classList.toggle("active", p.id === finalId));
+      switchBtns.forEach((b) => b.classList.toggle("active", b.dataset.target === finalId));
+      try { localStorage.setItem(tabStorageKey, finalId); } catch (e) {}
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", finalId);
+      window.history.replaceState({}, "", url.toString());
+    };
+    switchBtns.forEach((btn) => {
+      btn.addEventListener("click", () => showPanel(btn.dataset.target));
+    });
+    subNavLinks.forEach((a) => {
+      a.addEventListener("click", () => showPanel(a.dataset.target));
+    });
+    const jumpToAccountBtn = document.getElementById("jumpToAccountBtn");
+    if (jumpToAccountBtn) {
+      jumpToAccountBtn.addEventListener("click", () => showPanel("panel-account"));
+    }
+    const isEmbeddedView = document.documentElement.classList.contains("pb-embed");
+    const qsTab = new URLSearchParams(window.location.search).get("tab");
+    let initTab = qsTab;
+    if (!initTab) {
+      try { initTab = localStorage.getItem(tabStorageKey) || ""; } catch (e) { initTab = ""; }
+    }
+    const hasResults = document.getElementById("panel-results");
+    const successDone = "{{ success }}".includes("已完成生成");
+    if (isEmbeddedView) {
+      showPanel("panel-generate");
+    } else if (hasResults && successDone && !qsTab) {
+      // 生成完成后强制切到结果面板；避免 localStorage/上次面板阻止用户看到结果。
+      showPanel("panel-results");
+    } else if (initTab) {
+      showPanel(initTab);
+    } else {
+      showPanel("panel-generate");
+    }
+
+    // Candidate image modal preview
+    const modal = document.getElementById("imagePreviewModal");
+    const modalImg = document.getElementById("imagePreviewModalImg");
+    const previewItems = Array.from(document.querySelectorAll(".js-open-preview"));
+    const openButtons = Array.from(document.querySelectorAll(".js-open-preview, .js-preview-image"));
+    const closeTargets = Array.from(document.querySelectorAll("[data-close-modal='1']"));
+    const previewIndexText = document.getElementById("imagePreviewIndex");
+    const modalPrevBtn = document.getElementById("modalPrevBtn");
+    const modalNextBtn = document.getElementById("modalNextBtn");
+    const previewPrevBtn = document.getElementById("previewPrevBtn");
+    const previewNextBtn = document.getElementById("previewNextBtn");
+    let previewCursor = 0;
+    const srcAt = (idx) => {
+      if (!previewItems.length) return "";
+      const i = (idx + previewItems.length) % previewItems.length;
+      return previewItems[i].dataset.imageSrc || "";
+    };
+    const updatePreviewIndex = () => {
+      if (previewIndexText && previewItems.length) {
+        previewIndexText.textContent = "第 " + (previewCursor + 1) + " / " + previewItems.length + " 张";
+      }
+    };
+    const openModal = (src) => {
+      if (!modal || !modalImg || !src) return;
+      modalImg.src = src;
+      modal.classList.add("active");
+      document.body.classList.add("no-scroll");
+      updatePreviewIndex();
+    };
+    const closeModal = () => {
+      if (!modal || !modalImg) return;
+      modal.classList.remove("active");
+      modalImg.src = "";
+      document.body.classList.remove("no-scroll");
+    };
+    openButtons.forEach((el) => {
+      el.addEventListener("click", () => {
+        const src = el.dataset.imageSrc || "";
+        const idx = previewItems.findIndex((p) => (p.dataset.imageSrc || "") === src);
+        if (idx >= 0) previewCursor = idx;
+        openModal(src);
+      });
+    });
+    const movePreview = (delta) => {
+      if (!previewItems.length) return;
+      previewCursor = (previewCursor + delta + previewItems.length) % previewItems.length;
+      openModal(srcAt(previewCursor));
+    };
+    if (modalPrevBtn) modalPrevBtn.addEventListener("click", () => movePreview(-1));
+    if (modalNextBtn) modalNextBtn.addEventListener("click", () => movePreview(1));
+    if (previewPrevBtn) previewPrevBtn.addEventListener("click", () => movePreview(-1));
+    if (previewNextBtn) previewNextBtn.addEventListener("click", () => movePreview(1));
+    closeTargets.forEach((el) => {
+      el.addEventListener("click", closeModal);
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") closeModal();
+      if (!modal || !modal.classList.contains("active")) return;
+      if (ev.key === "ArrowLeft") movePreview(-1);
+      if (ev.key === "ArrowRight") movePreview(1);
+    });
+    const openFirstPreviewBtn = document.getElementById("openFirstPreviewBtn");
+    if (openFirstPreviewBtn) {
+      openFirstPreviewBtn.addEventListener("click", () => {
+        const first = document.querySelector(".js-open-preview");
+        if (first) first.click();
+      });
+    }
+    // Library pagination (front-end)
+    let galleryItems = Array.from(document.querySelectorAll("#panel-library .gallery-grid .gallery-item"));
+    const galleryPrevBtn = document.getElementById("galleryPrevBtn");
+    const galleryNextBtn = document.getElementById("galleryNextBtn");
+    const galleryPageInfo = document.getElementById("galleryPageInfo");
+    const gallerySearchInput = document.getElementById("gallerySearchInput");
+    const gallerySortSelect = document.getElementById("gallerySortSelect");
+    let galleryPage = 1;
+    const galleryPageSize = 12;
+    const applyGallerySort = () => {
+      const mode = gallerySortSelect ? gallerySortSelect.value : "newest";
+      const wrapper = document.querySelector("#panel-library .gallery-grid");
+      if (!wrapper) return;
+      galleryItems.sort((a, b) => {
+        const ida = (a.querySelector(".mono")?.textContent || "").trim();
+        const idb = (b.querySelector(".mono")?.textContent || "").trim();
+        const tsa = (a.querySelector(".muted")?.textContent || "").trim();
+        const tsb = (b.querySelector(".muted")?.textContent || "").trim();
+        if (mode === "id_asc") return ida.localeCompare(idb);
+        if (mode === "id_desc") return idb.localeCompare(ida);
+        if (mode === "oldest") return tsa.localeCompare(tsb);
+        return tsb.localeCompare(tsa);
+      });
+      galleryItems.forEach((el) => wrapper.appendChild(el));
+    };
+    const renderGalleryPage = () => {
+      const q = (gallerySearchInput?.value || "").trim().toLowerCase();
+      const visible = galleryItems.filter((el) => {
+        const txt = ((el.querySelector(".mono")?.textContent || "") + " " + (el.querySelector(".muted")?.textContent || "")).toLowerCase();
+        return !q || txt.includes(q);
+      });
+      const total = visible.length;
+      const pages = Math.max(1, Math.ceil(total / galleryPageSize));
+      galleryPage = Math.max(1, Math.min(galleryPage, pages));
+      const start = (galleryPage - 1) * galleryPageSize;
+      const end = start + galleryPageSize;
+      galleryItems.forEach((el) => { el.style.display = "none"; });
+      visible.forEach((el, idx) => {
+        el.style.display = idx >= start && idx < end ? "" : "none";
+      });
+      if (galleryPageInfo) galleryPageInfo.textContent = "第 " + galleryPage + " / " + pages + " 页";
+      if (galleryPrevBtn) galleryPrevBtn.disabled = galleryPage <= 1;
+      if (galleryNextBtn) galleryNextBtn.disabled = galleryPage >= pages;
+    };
+    if (galleryPrevBtn) galleryPrevBtn.addEventListener("click", () => { galleryPage -= 1; renderGalleryPage(); });
+    if (galleryNextBtn) galleryNextBtn.addEventListener("click", () => { galleryPage += 1; renderGalleryPage(); });
+    if (gallerySortSelect) gallerySortSelect.addEventListener("change", () => { galleryPage = 1; applyGallerySort(); renderGalleryPage(); });
+    if (gallerySearchInput) gallerySearchInput.addEventListener("input", () => { galleryPage = 1; renderGalleryPage(); });
+    if (galleryItems.length) { applyGallerySort(); renderGalleryPage(); }
+
+    // Results pagination (front-end) - avoid overly long page
+    const resultsGrid = document.getElementById("resultsGrid");
+    const resultCards = Array.from(document.querySelectorAll("#panel-results .js-result-card"));
+    const resultsPrevPageBtn = document.getElementById("resultsPrevPageBtn");
+    const resultsNextPageBtn = document.getElementById("resultsNextPageBtn");
+    const resultsPageInfo = document.getElementById("resultsPageInfo");
+    let resultsPage = 1;
+    const resultsPageSize = 4;
+    const renderResultsPage = () => {
+      if (!resultCards.length) return;
+      const pages = Math.max(1, Math.ceil(resultCards.length / resultsPageSize));
+      resultsPage = Math.max(1, Math.min(resultsPage, pages));
+      const start = (resultsPage - 1) * resultsPageSize;
+      const end = start + resultsPageSize;
+      resultCards.forEach((el, idx) => {
+        el.style.display = (idx >= start && idx < end) ? "" : "none";
+      });
+      if (resultsPageInfo) resultsPageInfo.textContent = "第 " + resultsPage + " / " + pages + " 页";
+      if (resultsPrevPageBtn) resultsPrevPageBtn.disabled = resultsPage <= 1;
+      if (resultsNextPageBtn) resultsNextPageBtn.disabled = resultsPage >= pages;
+      // keep layout stable when cards hidden
+      if (resultsGrid) resultsGrid.style.alignItems = "start";
+    };
+    if (resultsPrevPageBtn) resultsPrevPageBtn.addEventListener("click", () => { resultsPage -= 1; renderResultsPage(); });
+    if (resultsNextPageBtn) resultsNextPageBtn.addEventListener("click", () => { resultsPage += 1; renderResultsPage(); });
+    if (resultCards.length) renderResultsPage();
+
+    const orderFilterSelect = document.getElementById("orderFilterSelect");
+    const orderRows = Array.from(document.querySelectorAll(".user-order-row"));
+    if (orderFilterSelect) {
+      orderFilterSelect.addEventListener("change", () => {
+        const v = orderFilterSelect.value;
+        orderRows.forEach((row) => {
+          row.style.display = (v === "all" || row.dataset.status === v) ? "" : "none";
+        });
+      });
+    }
+
+    // Payment QR modal: open QR first, then submit request after user confirms payment.
+    const quotaApplyForm = document.getElementById("quotaApplyForm");
+    const openPaymentModalBtn = document.getElementById("openPaymentModalBtn");
+    const submitAfterPaidBtn = document.getElementById("submitAfterPaidBtn");
+    const paymentModal = document.getElementById("paymentModal");
+    const paymentModalImg = document.getElementById("paymentModalImg");
+    const paymentModalTitle = document.getElementById("paymentModalTitle");
+    const paymentAmountHint = document.getElementById("paymentAmountHint");
+    const applyTimesInput = document.getElementById("applyTimesInput");
+    const payModalCloseTargets = Array.from(document.querySelectorAll("[data-close-pay-modal='1']"));
+    const customerServiceQr = {{ (customer_service_wechat_qr_image_url or '')|tojson }};
+    const alipayQr = {{ (alipay_qr_image_url or '')|tojson }};
+    const wechatQr = {{ (wechat_qr_image_url or '')|tojson }};
+    const paymentPreviewImg = document.getElementById("paymentPreviewImg");
+    const paymentPreviewTitle = document.getElementById("paymentPreviewTitle");
+    const payChannelSelect = document.getElementById("payChannelSelect");
+    const payChannelInput = document.getElementById("pay_channel_input");
+    const getSelectedPayChannel = () => {
+      if (payChannelInput && payChannelInput.value) return payChannelInput.value;
+      if (payChannelSelect && payChannelSelect.value) return payChannelSelect.value;
+      return "customer_service_wechat";
+    };
+    const syncPayChannelInputFromSelect = () => {
+      if (!payChannelSelect || !payChannelInput) return;
+      payChannelInput.value = payChannelSelect.value || "customer_service_wechat";
+    };
+    const syncPaymentPreview = () => {
+      if (!paymentPreviewImg || !paymentPreviewTitle) return;
+      const ch = getSelectedPayChannel();
+      let qr = "";
+      let title = "";
+      if (ch === "wechat") {
+        qr = wechatQr;
+        title = "二维码预览（微信支付码）";
+      } else if (ch === "alipay") {
+        qr = alipayQr;
+        title = "二维码预览（支付宝支付码）";
+      } else {
+        qr = customerServiceQr;
+        title = "二维码预览（客服微信码）";
+      }
+      if (qr) {
+        paymentPreviewImg.src = qr;
+        paymentPreviewImg.style.display = "";
+      } else {
+        paymentPreviewImg.src = "";
+        paymentPreviewImg.style.display = "none";
+      }
+      paymentPreviewTitle.textContent = title;
+    };
+    const unitPrice = parseFloat({{ generation_unit_price }}) || 3.0;
+    const closePayModal = () => {
+      if (!paymentModal) return;
+      paymentModal.classList.remove("active");
+      document.body.classList.remove("no-scroll");
+    };
+    const pricePackageRadios = Array.from(document.querySelectorAll('input[name="price_package_id"]'));
+    const customPriceRadio = document.getElementById("price_package_custom_radio");
+    const customBuyTimesInput = document.getElementById("customBuyTimesInput");
+    const syncApplyTimes = () => {
+      if (!applyTimesInput) return;
+      const isCustom = !!(customPriceRadio && customPriceRadio.checked);
+      if (customBuyTimesInput) customBuyTimesInput.disabled = !isCustom;
+      if (isCustom) {
+        const t = Math.max(1, parseInt(customBuyTimesInput?.value || "1", 10) || 1);
+        applyTimesInput.value = t;
+        return;
+      }
+      const checkedPkg = pricePackageRadios.find((r) => r.checked);
+      const times = Math.max(1, parseInt(checkedPkg?.dataset?.times || "1", 10) || 1);
+      applyTimesInput.value = times;
+    };
+    const openPayModal = () => {
+      if (!paymentModal || !paymentModalImg) return;
+      syncApplyTimes();
+      syncPaymentPreview();
+      const times = Math.max(1, parseInt(applyTimesInput?.value || "1", 10) || 1);
+      const checkedPkg = pricePackageRadios.find((r) => r.checked);
+      const pkgTotal = parseFloat(checkedPkg?.dataset?.totalYuan || "");
+      const totalYuan = Number.isFinite(pkgTotal) ? pkgTotal : (times * unitPrice);
+      const amount = Number(totalYuan).toFixed(2);
+      const ch = getSelectedPayChannel();
+      let qr = "";
+      let title = "";
+      if (ch === "wechat") {
+        qr = wechatQr;
+        title = "微信支付码支付";
+      } else if (ch === "alipay") {
+        qr = alipayQr;
+        title = "支付宝支付码支付";
+      } else {
+        qr = customerServiceQr;
+        title = "客服微信码支付";
+      }
+      if (!qr) {
+        alert((ch === "wechat" ? "微信支付码" : ch === "alipay" ? "支付宝支付码" : "客服微信码") + "未配置，请联系管理员。");
+        return;
+      }
+      paymentModalImg.src = qr;
+      if (paymentModalTitle) {
+        paymentModalTitle.textContent = title;
+      }
+      if (paymentAmountHint) {
+        paymentAmountHint.textContent = "本次申请 " + times + " 次，应付约 " + amount + " 元。";
+      }
+      paymentModal.classList.add("active");
+      document.body.classList.add("no-scroll");
+    };
+    if (openPaymentModalBtn) {
+      openPaymentModalBtn.addEventListener("click", openPayModal);
+    }
+    payModalCloseTargets.forEach((el) => el.addEventListener("click", closePayModal));
+    pricePackageRadios.forEach((r) => r.addEventListener("change", syncApplyTimes));
+    if (customBuyTimesInput) customBuyTimesInput.addEventListener("input", syncApplyTimes);
+    syncApplyTimes();
+    if (payChannelSelect) {
+      payChannelSelect.addEventListener("change", () => {
+        syncPayChannelInputFromSelect();
+        syncPaymentPreview();
+      });
+    }
+    syncPayChannelInputFromSelect();
+    syncPaymentPreview();
+    if (submitAfterPaidBtn && quotaApplyForm) {
+      submitAfterPaidBtn.addEventListener("click", () => {
+        if (submitAfterPaidBtn.getAttribute("data-submitting") === "1") return;
+        submitAfterPaidBtn.setAttribute("data-submitting", "1");
+        submitAfterPaidBtn.disabled = true;
+        if (openPaymentModalBtn) {
+          openPaymentModalBtn.disabled = true;
+          openPaymentModalBtn.textContent = "提交中…";
+        }
+        alert("已提交支付确认，预计 3-6 分钟内完成授权，请耐心等待。");
+        quotaApplyForm.submit();
+      });
+    }
+  })();
+</script>
+{% endblock %}

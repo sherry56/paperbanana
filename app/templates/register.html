@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-split">
+  <div class="login-brand">
+    <div class="login-logo">PaperFigure</div>
+    <div class="login-tagline">快速创建账号，注册后需管理员授权。</div>
+    <div class="muted login-sub">
+      授权后可按账户档位使用生成与精修功能。
+    </div>
+  </div>
+
+  <div class="login-card">
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="success">{{ success }}</div>{% endif %}
+
+    <form method="post" action="/register" class="login-form">
+      <label class="login-label">用户名
+        <input class="login-input" name="username" autocomplete="username" required />
+      </label>
+      <label class="login-label">密码
+        <input class="login-input" name="password" type="password" autocomplete="new-password" required />
+      </label>
+      <button class="login-btn" type="submit">注册 · Register</button>
+      <div class="login-divider"></div>
+      <a class="login-secondary login-secondary--brand" href="/login">返回登录 · Back to sign in</a>
+    </form>
+  </div>
+</section>
+<script>
+  (function () {
+    const form = document.querySelector('form[action="/register"]');
+    if (!form) return;
+    const btn = form.querySelector('button[type="submit"]');
+    if (!btn) return;
+    form.addEventListener("submit", function () {
+      btn.disabled = true;
+      btn.textContent = "正在注册…";
+    });
+  })();
+</script>
+{% endblock %}
+

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h2>生成进行中</h2>
+    <p class="muted">后台正在生成，本页通过短连接轮询状态，不会因长时间等待而断开。</p>
+  </div>
+</section>
+<section class="card section-card gen-wait-card">
+  <div id="genWaitSpinner" class="gen-wait-spinner" aria-hidden="true"></div>
+  <p id="genWaitStatus" class="gen-wait-status">已排队，正在生成…</p>
+  <p id="genWaitElapsed" class="muted"></p>
+  <p id="genWaitHint" class="muted">预计参考：<b>{{ gen_estimated_seconds }}</b> 秒（以个人历史耗时为准）。可暂时切换标签页，请勿关闭浏览器。</p>
+  <p id="genWaitError" class="error" hidden></p>
+  <div class="actions-row" id="genWaitActions" hidden>
+    <a class="nav-link" href="/">返回首页</a>
+  </div>
+</section>
+<script>
+  (function () {
+    var jobId = {{ job_id|tojson }};
+    var pollMs = 2000;
+    var timer = null;
+    function fmt(sec) {
+      sec = Math.max(0, parseInt(sec, 10) || 0);
+      var m = Math.floor(sec / 60);
+      var s = sec % 60;
+      return m ? m + " 分 " + s + " 秒" : sec + " 秒";
+    }
+    function stopPoll() {
+      if (timer) clearInterval(timer);
+      timer = null;
+    }
+    function poll() {
+      fetch("/generate/job/" + encodeURIComponent(jobId), {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      })
+        .then(function (r) {
+          if (r.status === 401) {
+            window.location.href = "/login";
+            return null;
+          }
+          if (r.status === 404) {
+            stopPoll();
+            document.getElementById("genWaitSpinner").style.display = "none";
+            document.getElementById("genWaitStatus").textContent = "任务不存在或已过期";
+            document.getElementById("genWaitActions").hidden = false;
+            document.getElementById("genWaitHint").style.display = "none";
+            return null;
+          }
+          return r.json();
+        })
+        .then(function (data) {
+          if (!data) return;
+          if (data.status === "running") {
+            document.getElementById("genWaitStatus").textContent = "生成中…";
+            var el = document.getElementById("genWaitElapsed");
+            if (data.elapsed_sec != null) {
+              el.textContent = "已进行约 " + fmt(data.elapsed_sec);
+            }
+            return;
+          }
+          if (data.status === "done") {
+            stopPoll();
+            document.getElementById("genWaitStatus").textContent = "即将跳转到结果页…";
+            window.location.href = "/generate/finish/" + encodeURIComponent(jobId);
+            return;
+          }
+          if (data.status === "error") {
+            stopPoll();
+            document.getElementById("genWaitSpinner").style.display = "none";
+            document.getElementById("genWaitStatus").textContent = "生成失败";
+            var errEl = document.getElementById("genWaitError");
+            errEl.hidden = false;
+            errEl.textContent = data.error || "未知错误";
+            document.getElementById("genWaitActions").hidden = false;
+            document.getElementById("genWaitHint").style.display = "none";
+            return;
+          }
+        })
+        .catch(function () {
+          document.getElementById("genWaitElapsed").textContent =
+            "网络波动，正在重试…";
+        });
+    }
+    poll();
+    timer = setInterval(poll, pollMs);
+  })();
+</script>
+{% endblock %}

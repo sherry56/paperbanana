@@ -1,0 +1,637 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h2>用户账户管理</h2>
+    <p class="muted">已拆分多视图：概览、用户账户、模板策略、订单管理。</p>
+  </div>
+</section>
+{% if user_crud_msg == "created" %}<div class="success">用户创建成功。</div>{% endif %}
+{% if user_crud_msg == "create_failed" %}<div class="error">用户创建失败，请检查用户名/密码是否有效或已存在。</div>{% endif %}
+{% if user_crud_msg == "pwd_updated" %}<div class="success">密码更新成功。</div>{% endif %}
+{% if user_crud_msg == "pwd_update_failed" %}<div class="error">密码更新失败，请检查输入。</div>{% endif %}
+{% if user_crud_msg == "preset_updated" %}<div class="success">用户组合更新成功。</div>{% endif %}
+{% if user_crud_msg == "default_applied" %}<div class="success">已一键把默认模板应用到所有普通用户。</div>{% endif %}
+{% if user_crud_msg == "order_paid" %}<div class="success">申请已通过，次数已手动授权。</div>{% endif %}
+{% if user_crud_msg == "order_closed" %}<div class="success">申请已驳回。</div>{% endif %}
+{% if user_crud_msg == "order_already_processed" %}<div class="error">该申请已处理过，不能重复授权/驳回。</div>{% endif %}
+{% if user_crud_msg == "order_deleted" %}<div class="success">申请已删除。</div>{% endif %}
+{% if user_crud_msg == "order_cannot_delete_unprocessed" %}<div class="error">未处理的申请不能删除。</div>{% endif %}
+{% if user_crud_msg == "order_not_found" %}<div class="error">申请单不存在。</div>{% endif %}
+{% if user_crud_msg == "template_saved" %}<div class="success">档位模板已保存。</div>{% endif %}
+{% if user_crud_msg == "template_save_failed" %}<div class="error">档位模板保存失败，请检查参数。</div>{% endif %}
+{% if user_crud_msg == "message_replied" %}<div class="success">反馈回复成功。</div>{% endif %}
+{% if user_crud_msg == "message_reply_failed" %}<div class="error">反馈回复失败，请重试。</div>{% endif %}
+{% if user_crud_msg == "message_reply_empty" %}<div class="error">请输入反馈内容。</div>{% endif %}
+{% if user_crud_msg == "message_not_found" %}<div class="error">留言不存在。</div>{% endif %}
+{% if user_crud_msg == "template_reset" %}<div class="success">档位模板已重置为系统默认。</div>{% endif %}
+{% if user_crud_msg == "template_reset_failed" %}<div class="error">档位模板重置失败。</div>{% endif %}
+{% if user_crud_msg == "template_deleted" %}<div class="success">已删除该档位的自定义模板，已恢复为系统内置默认。</div>{% endif %}
+{% if user_crud_msg == "template_delete_failed" %}<div class="error">删除自定义模板失败。</div>{% endif %}
+{% if user_crud_msg == "qr_updated" %}<div class="success">客服微信码已更新。</div>{% endif %}
+{% if user_crud_msg == "qr_update_failed" %}<div class="error">客服微信码更新失败，请上传 png/jpg/webp 且不超过 5MB。</div>{% endif %}
+{% if user_crud_msg == "packages_updated" %}<div class="success">价目表套餐已更新。</div>{% endif %}
+{% if user_crud_msg == "packages_update_failed" %}<div class="error">价目表套餐更新失败，请检查 label/times/price_yuan 输入。</div>{% endif %}
+
+<section class="admin-layout">
+  <aside class="card admin-nav">
+    <div class="candidate-title">模块导航</div>
+    <a class="{{ 'active' if view == 'overview' else '' }}" href="/admin/users?view=overview">统计概览</a>
+    <a class="{{ 'active' if view == 'users' else '' }}" href="/admin/users?view=users">用户账户</a>
+    <a class="{{ 'active' if view == 'templates' else '' }}" href="/admin/users?view=templates">模板策略</a>
+    <a class="{{ 'active' if view == 'orders' else '' }}" href="/admin/users?view=orders">申请管理</a>
+  </aside>
+  <div class="admin-main">
+    {% if view == "overview" %}
+    <section class="card section-card">
+      <h3>系统概览</h3>
+      <div class="grid4 admin-kpis">
+        <div class="card inner-card"><div class="muted">总用户数</div><div class="kpi-num">{{ overview_stats.total_users }}</div></div>
+        <div class="card inner-card"><div class="muted">管理员</div><div class="kpi-num">{{ overview_stats.admins }}</div></div>
+        <div class="card inner-card"><div class="muted">普通用户</div><div class="kpi-num">{{ overview_stats.normal_users }}</div></div>
+        <div class="card inner-card"><div class="muted">已授权用户</div><div class="kpi-num">{{ overview_stats.authorized_users }}</div></div>
+      </div>
+      <div class="grid4 admin-kpis">
+        <div class="card inner-card"><div class="muted">待授权用户</div><div class="kpi-num">{{ overview_stats.unauthorized_users }}</div></div>
+        <div class="card inner-card"><div class="muted">申请单总数</div><div class="kpi-num">{{ overview_stats.total_orders }}</div></div>
+        <div class="card inner-card"><div class="muted">已授权申请</div><div class="kpi-num">{{ overview_stats.paid_orders }}</div></div>
+        <div class="card inner-card"><div class="muted">待审核申请</div><div class="kpi-num">{{ overview_stats.created_orders }}</div></div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if view == "templates" %}
+    <section class="card section-card">
+      <h3>新注册用户默认模板</h3>
+      <form method="post" action="/admin/settings/default-new-user-mode" class="inline-form">
+        <select name="mode">
+          <option value="" {% if not default_new_user_mode %}selected{% endif %}>（不设置）</option>
+          {% for t in tier_order %}
+            {% set mode_val = "tier:" ~ t %}
+            <option value="{{ mode_val }}" {% if default_new_user_mode == mode_val %}selected{% endif %}>
+              {{ tier_label(t) }} ({{ mode_val }})
+            </option>
+          {% endfor %}
+        </select>
+        <button type="submit">保存默认模板</button>
+      </form>
+      <form method="post" action="/admin/settings/default-new-user-mode/apply-existing" style="margin-top:8px;">
+        <button type="submit" class="btn-muted">一键应用到全部普通用户</button>
+      </form>
+    </section>
+
+    <section class="card section-card">
+      <h3>生成计费设置</h3>
+      <form method="post" action="/admin/settings/generation-unit-price" class="inline-form">
+        <label>单次价格（元）
+          <input type="number" name="unit_price_yuan" min="0.01" step="0.01" value="{{ generation_unit_price }}" />
+        </label>
+        <button type="submit">保存价格</button>
+      </form>
+      <div class="muted">一次运行消耗 1 次，价格用于计算普通用户的申请总金额（按次数 × 单价）。次数由管理员手动授权。</div>
+    </section>
+
+    <section class="card section-card">
+      <h3>档位模板管理（增删改）</h3>
+      <div class="muted">可修改档位模板名称与参数并保存；仅当该档位存在<strong>已保存的自定义配置</strong>时，可点击「删除自定义模板」从数据库移除覆盖项，恢复为内置系统默认。</div>
+      {% for tid in tier_order %}
+        {% set tcfg = tier_templates.get(tid) %}
+        {% set has_custom = tid in tier_override_ids %}
+        <form method="post" action="/admin/templates/{{ tid }}/upsert" class="card inner-card">
+          <div class="user-header">
+            <div><b>{{ tid }}</b> · <span class="muted">{{ tier_label(tid) }}</span></div>
+            <div class="actions-row">
+              <button type="submit">保存模板</button>
+            </div>
+          </div>
+          <label>模板名称
+            <input type="text" name="template_label" value="{{ tcfg.label }}" />
+          </label>
+          <div class="grid3">
+            <label>模式
+              <select name="exp_mode">
+                <option value="demo_planner_critic" {% if tcfg.exp_mode == "demo_planner_critic" %}selected{% endif %}>demo_planner_critic</option>
+                <option value="demo_full" {% if tcfg.exp_mode == "demo_full" %}selected{% endif %}>demo_full</option>
+              </select>
+            </label>
+            <label>检索
+              <select name="retrieval_setting">
+                <option value="auto" {% if tcfg.retrieval_setting == "auto" %}selected{% endif %}>auto</option>
+                <option value="manual" {% if tcfg.retrieval_setting == "manual" %}selected{% endif %}>manual</option>
+                <option value="random" {% if tcfg.retrieval_setting == "random" %}selected{% endif %}>random</option>
+                <option value="none" {% if tcfg.retrieval_setting == "none" %}selected{% endif %}>none</option>
+              </select>
+            </label>
+            <label>候选数
+              <input type="number" min="1" max="20" name="num_candidates" value="{{ tcfg.num_candidates }}" />
+            </label>
+          </div>
+          <div class="grid3">
+            <label>宽高比
+              <select name="aspect_ratio">
+                <option value="16:9" {% if tcfg.aspect_ratio == "16:9" %}selected{% endif %}>16:9</option>
+                <option value="21:9" {% if tcfg.aspect_ratio == "21:9" %}selected{% endif %}>21:9</option>
+                <option value="3:2" {% if tcfg.aspect_ratio == "3:2" %}selected{% endif %}>3:2</option>
+              </select>
+            </label>
+            <label>Critic轮数
+              <input type="number" min="1" max="5" name="max_critic_rounds" value="{{ tcfg.max_critic_rounds }}" />
+            </label>
+            <label>精修分辨率上限
+              <select name="max_refine_resolution">
+                <option value="2K" {% if tcfg.max_refine_resolution == "2K" %}selected{% endif %}>2K</option>
+                <option value="4K" {% if tcfg.max_refine_resolution == "4K" %}selected{% endif %}>4K</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid2">
+            <label>主模型
+              <input type="text" name="main_model_name" value="{{ tcfg.main_model_name }}" />
+            </label>
+            <label>生图模型
+              <input type="text" name="image_gen_model_name" value="{{ tcfg.image_gen_model_name }}" />
+            </label>
+          </div>
+        </form>
+        <div class="actions-row" style="margin-top:-8px; margin-bottom:14px;">
+          {% if has_custom %}
+          <form method="post" action="/admin/templates/{{ tid }}/delete" class="inline" onsubmit="return confirm('确定删除「{{ tid }}」的自定义模板？删除后将使用系统内置默认参数。');">
+            <button type="submit" class="btn-danger">删除自定义模板</button>
+          </form>
+          {% else %}
+          <span class="muted">当前无自定义保存记录，使用系统内置默认（无可删除项）。</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if view == "users" %}
+    <section class="card section-card">
+      <h3>新增用户</h3>
+      <form method="post" action="/admin/users/create" class="grid3">
+        <label>用户名<input type="text" name="username" required /></label>
+        <label>初始密码<input type="text" name="password" required /></label>
+        <label>角色
+          <select name="role">
+            <option value="user">普通用户</option>
+            <option value="admin">管理员</option>
+          </select>
+        </label>
+        <label><input type="checkbox" name="authorized" value="1" /> 创建后直接授权（普通用户）</label>
+        <div class="actions-row"><button type="submit">创建用户</button></div>
+      </form>
+      <hr />
+      <h3>用户筛选</h3>
+      <form method="get" action="/admin/users" class="grid3">
+        <input type="hidden" name="view" value="users" />
+        <label>用户名关键字<input type="text" name="q" value="{{ q }}" /></label>
+        <label>角色
+          <select name="role_filter">
+            <option value="" {% if not role_filter %}selected{% endif %}>全部</option>
+            <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>管理员</option>
+            <option value="user" {% if role_filter == 'user' %}selected{% endif %}>普通用户</option>
+          </select>
+        </label>
+        <label>授权状态
+          <select name="auth_filter">
+            <option value="" {% if not auth_filter %}selected{% endif %}>全部</option>
+            <option value="authorized" {% if auth_filter == 'authorized' %}selected{% endif %}>已授权</option>
+            <option value="unauthorized" {% if auth_filter == 'unauthorized' %}selected{% endif %}>未授权</option>
+          </select>
+        </label>
+        <label>每页条数
+          <select name="page_size">
+            <option value="10" {% if page_size == 10 %}selected{% endif %}>10</option>
+            <option value="20" {% if page_size == 20 %}selected{% endif %}>20</option>
+            <option value="30" {% if page_size == 30 %}selected{% endif %}>30</option>
+            <option value="50" {% if page_size == 50 %}selected{% endif %}>50</option>
+          </select>
+        </label>
+        <input type="hidden" name="page" value="1" />
+        <div class="actions-row"><button type="submit">应用筛选</button><a class="nav-link" href="/admin/users?view=users">重置</a></div>
+      </form>
+    </section>
+
+    <section class="section-card">
+      <h3>用户列表</h3>
+      <div class="muted">当前第 {{ page }} / {{ total_pages }} 页，共 {{ total_filtered }} 条筛选结果。</div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>生成授权</th>
+              <th>编辑权限</th>
+              <th>方法优化权限</th>
+              <th>默认组合</th>
+              <th>配额</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for uname, info in users.items() %}
+            <tr>
+              <td class="mono">{{ uname }}</td>
+              <td>{{ info.role }}</td>
+              <td>{{ "是" if info.authorized else "否" }}</td>
+              <td>{{ "是" if info.can_edit_image else "否" }}</td>
+              <td>{{ "是" if info.can_optimize_method else "否" }}</td>
+              <td>{{ info.default_gen_mode or "未设置" }}</td>
+              <td>{{ info.gen_quota_remaining if info.gen_quota_remaining != none else "unlimited" }}</td>
+              <td>
+                <a class="nav-link" href="/admin/users?view=users&q={{ q }}&role_filter={{ role_filter }}&auth_filter={{ auth_filter }}&page_size={{ page_size }}&page={{ page }}&detail_user={{ uname }}">查看详情</a>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="muted">暂无用户</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="actions-row">
+        {% if page > 1 %}<a class="nav-link" href="/admin/users?view=users&q={{ q }}&role_filter={{ role_filter }}&auth_filter={{ auth_filter }}&page_size={{ page_size }}&page={{ page - 1 }}">上一页</a>{% else %}<span class="muted">上一页</span>{% endif %}
+        {% if page < total_pages %}<a class="nav-link" href="/admin/users?view=users&q={{ q }}&role_filter={{ role_filter }}&auth_filter={{ auth_filter }}&page_size={{ page_size }}&page={{ page + 1 }}">下一页</a>{% else %}<span class="muted">下一页</span>{% endif %}
+      </div>
+    </section>
+
+    {% if detail_user and detail_info %}
+    <section class="card section-card">
+      <h3>用户详情：{{ detail_user }}</h3>
+      <div class="muted">在本区域集中管理该用户的权限、授权、组合与密码。</div>
+      <div class="grid2">
+        <form method="post" action="/admin/users/{{ detail_user }}/password" class="card inner-card">
+          <label>重置密码</label>
+          <input type="text" name="new_password" placeholder="至少4位" required />
+          <button class="btn-muted" type="submit">重置密码</button>
+        </form>
+        {% if detail_info.role != "admin" %}
+        <div class="card inner-card">
+          <label>快捷开关</label>
+          <div class="actions-row">
+            <form method="post" action="/admin/users/{{ detail_user }}/authorized" class="inline">
+              <input type="hidden" name="authorized" value="{{ 0 if detail_info.authorized else 1 }}" />
+              <button type="submit">{{ "关闭生成权限" if detail_info.authorized else "开通生成权限" }}</button>
+            </form>
+            <form method="post" action="/admin/users/{{ detail_user }}/edit-perm" class="inline">
+              <input type="hidden" name="can_edit_image" value="{{ 0 if detail_info.can_edit_image else 1 }}" />
+              <button class="btn-muted" type="submit">{{ "关闭编辑权限" if detail_info.can_edit_image else "开通编辑权限" }}</button>
+            </form>
+            <form method="post" action="/admin/users/{{ detail_user }}/method-opt-perm" class="inline">
+              <input type="hidden" name="can_optimize_method" value="{{ 0 if detail_info.can_optimize_method else 1 }}" />
+              <button class="btn-muted" type="submit">{{ "关闭方法优化权限" if detail_info.can_optimize_method else "开通方法优化权限" }}</button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if detail_info.role != "admin" %}
+      <div class="grid2">
+        <form method="post" action="/admin/users/{{ detail_user }}/quota" class="card inner-card">
+          <label>生成配额（空=无限制）</label>
+          <input type="text" name="quota_raw" placeholder="例如 20" />
+          <button type="submit">保存配额</button>
+        </form>
+        <form method="post" action="/admin/users/{{ detail_user }}/default-mode" class="card inner-card">
+          <label>用户默认组合</label>
+          <select name="mode">
+            <option value="" {% if not detail_info.default_gen_mode %}selected{% endif %}>（不设置）</option>
+            {% for t in detail_info.allowed_tiers %}
+              {% set mode_val = "tier:" ~ t %}
+              <option value="{{ mode_val }}" {% if detail_info.default_gen_mode == mode_val %}selected{% endif %}>
+                档位 · {{ tier_label(t) }} ({{ mode_val }})
+              </option>
+            {% endfor %}
+            {% for p in detail_info.approved_presets %}
+              {% set mode_val = "preset:" ~ p.id %}
+              <option value="{{ mode_val }}" {% if detail_info.default_gen_mode == mode_val %}selected{% endif %}>
+                组合 · {{ p.label }} ({{ mode_val }})
+              </option>
+            {% endfor %}
+          </select>
+          <button type="submit">保存默认组合</button>
+        </form>
+      </div>
+
+      <form method="post" action="/admin/users/{{ detail_user }}/tiers" class="card inner-card">
+        <label>档位授权</label>
+        <div class="checks-row">
+          {% for t in tier_order %}
+            <label class="check-pill"><input type="checkbox" name="tiers" value="{{ t }}" {% if t in detail_info.allowed_tiers %}checked{% endif %}/> {{ tier_label(t) }}</label>
+          {% endfor %}
+        </div>
+        <button type="submit">保存档位</button>
+      </form>
+
+      {% if detail_info.approved_presets %}
+      <div class="card inner-card">
+        <label>已下发组合（删除）</label>
+        {% for p in detail_info.approved_presets %}
+          <form method="post" action="/admin/users/{{ detail_user }}/remove-preset" class="inline-form danger-inline">
+            <input type="hidden" name="preset_id" value="{{ p.id }}" />
+            <div class="muted">{{ p.label }} ({{ p.id }})</div>
+            <button class="btn-danger" type="submit">删除该组合</button>
+          </form>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" action="/admin/users/{{ detail_user }}/add-preset" class="card inner-card">
+        <label>新增该用户组合（可视化参数）</label>
+        <input type="text" name="preset_label" placeholder="例如：低成本稳定版" />
+        <div class="grid3"><label>模式<select name="exp_mode"><option value="demo_planner_critic">demo_planner_critic</option><option value="demo_full">demo_full</option></select></label><label>检索<select name="retrieval_setting"><option value="auto">auto</option><option value="manual">manual</option><option value="random">random</option><option value="none">none</option></select></label><label>候选数<input type="number" min="1" max="20" name="num_candidates" value="1" /></label></div>
+        <div class="grid3"><label>宽高比<select name="aspect_ratio"><option value="16:9">16:9</option><option value="21:9">21:9</option><option value="3:2">3:2</option></select></label><label>Critic轮数<input type="number" min="1" max="5" name="max_critic_rounds" value="2" /></label><label>精修分辨率上限<select name="max_refine_resolution"><option value="2K">2K</option><option value="4K">4K</option></select></label></div>
+        <div class="grid2"><label>主模型<input type="text" name="main_model_name" /></label><label>生图模型<input type="text" name="image_gen_model_name" /></label></div>
+        <label><input type="checkbox" name="set_as_default" value="1" /> 下发后设为该用户默认组合</label>
+        <button type="submit">新增并下发组合</button>
+      </form>
+
+      {% if detail_info.approved_presets %}
+      <div class="card inner-card">
+        <label>该用户组合编辑区</label>
+        {% for p in detail_info.approved_presets %}
+          {% set cfg = p.config or {} %}
+          <form method="post" action="/admin/users/{{ detail_user }}/update-preset" class="preset-editor">
+            <input type="hidden" name="preset_id" value="{{ p.id }}" />
+            <div class="muted">组合 ID：{{ p.id }}</div>
+            <input type="text" name="preset_label" value="{{ p.label }}" />
+            <div class="grid3"><label>模式<select name="exp_mode"><option value="demo_planner_critic" {% if cfg.get('exp_mode') == 'demo_planner_critic' %}selected{% endif %}>demo_planner_critic</option><option value="demo_full" {% if cfg.get('exp_mode') == 'demo_full' %}selected{% endif %}>demo_full</option></select></label><label>检索<select name="retrieval_setting"><option value="auto" {% if cfg.get('retrieval_setting') == 'auto' %}selected{% endif %}>auto</option><option value="manual" {% if cfg.get('retrieval_setting') == 'manual' %}selected{% endif %}>manual</option><option value="random" {% if cfg.get('retrieval_setting') == 'random' %}selected{% endif %}>random</option><option value="none" {% if cfg.get('retrieval_setting') == 'none' %}selected{% endif %}>none</option></select></label><label>候选数<input type="number" min="1" max="20" name="num_candidates" value="{{ cfg.get('num_candidates', 1) }}" /></label></div>
+            <div class="grid3"><label>宽高比<select name="aspect_ratio"><option value="16:9" {% if cfg.get('aspect_ratio') == '16:9' %}selected{% endif %}>16:9</option><option value="21:9" {% if cfg.get('aspect_ratio') == '21:9' %}selected{% endif %}>21:9</option><option value="3:2" {% if cfg.get('aspect_ratio') == '3:2' %}selected{% endif %}>3:2</option></select></label><label>Critic轮数<input type="number" min="1" max="5" name="max_critic_rounds" value="{{ cfg.get('max_critic_rounds', 2) }}" /></label><label>精修分辨率上限<select name="max_refine_resolution"><option value="2K" {% if cfg.get('max_refine_resolution', '2K') == '2K' %}selected{% endif %}>2K</option><option value="4K" {% if cfg.get('max_refine_resolution', '2K') == '4K' %}selected{% endif %}>4K</option></select></label></div>
+            <div class="grid2"><label>主模型<input type="text" name="main_model_name" value="{{ cfg.get('main_model_name', '') }}" /></label><label>生图模型<input type="text" name="image_gen_model_name" value="{{ cfg.get('image_gen_model_name', '') }}" /></label></div>
+            <label><input type="checkbox" name="set_as_default" value="1" /> 保存后设为默认组合</label>
+            <button type="submit">保存该组合</button>
+          </form>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endif %}
+    </section>
+    {% endif %}
+    {% endif %}
+
+    {% if view == "orders" %}
+    <section class="card section-card">
+      <h3>申请单管理（人工审核授权）</h3>
+      <details class="card inner-card" open style="margin-bottom:14px;">
+        <summary style="cursor:pointer;"><b>支付码/客服码与价目表（手动设置）</b></summary>
+        <div class="section-switcher" style="margin-top:10px;">
+          <button class="switch-btn admin-orders-tab-btn active" type="button" data-target="admin_orders_tab_customer">客服微信码</button>
+          <button class="switch-btn admin-orders-tab-btn" type="button" data-target="admin_orders_tab_pay">支付码设置</button>
+          <button class="switch-btn admin-orders-tab-btn" type="button" data-target="admin_orders_tab_price">价目表</button>
+        </div>
+
+        <div class="switch-panel active admin-orders-tab-panel" id="admin_orders_tab_customer">
+          <form method="post" action="/admin/settings/customer-service-wechat-qr" enctype="multipart/form-data" class="card inner-card">
+            <div class="candidate-title">客服微信码（联系方式）</div>
+            {% if customer_service_wechat_qr_image_url %}
+            <img src="{{ customer_service_wechat_qr_image_url }}" class="gallery-thumb gallery-thumb--contain result-ref-thumb" loading="lazy" decoding="async" />
+            {% else %}
+            <div class="muted">尚未上传</div>
+            {% endif %}
+            <input type="file" name="qr_file" accept="image/png,image/jpeg,image/webp" required />
+            <button type="submit">上传/更新</button>
+          </form>
+        </div>
+
+        <div class="switch-panel admin-orders-tab-panel" id="admin_orders_tab_pay">
+          <div style="display:flex; flex-direction:column; gap:14px; padding:0;">
+            <form method="post" action="/admin/settings/payment-qr/alipay" enctype="multipart/form-data" class="card inner-card">
+              <div class="candidate-title">支付宝收款码</div>
+              {% if alipay_qr_image_url %}
+              <img src="{{ alipay_qr_image_url }}" class="gallery-thumb gallery-thumb--contain result-ref-thumb" loading="lazy" decoding="async" />
+              {% else %}
+              <div class="muted">尚未上传</div>
+              {% endif %}
+              <input type="file" name="qr_file" accept="image/png,image/jpeg,image/webp" required />
+              <button type="submit">上传/更新</button>
+            </form>
+
+            <form method="post" action="/admin/settings/payment-qr/wechat" enctype="multipart/form-data" class="card inner-card">
+              <div class="candidate-title">微信收款码</div>
+              {% if wechat_qr_image_url %}
+              <img src="{{ wechat_qr_image_url }}" class="gallery-thumb gallery-thumb--contain result-ref-thumb" loading="lazy" decoding="async" />
+              {% else %}
+              <div class="muted">尚未上传</div>
+              {% endif %}
+              <input type="file" name="qr_file" accept="image/png,image/jpeg,image/webp" required />
+              <button type="submit">上传/更新</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="switch-panel admin-orders-tab-panel" id="admin_orders_tab_price">
+          <form method="post" action="/admin/settings/price-packages" class="card inner-card">
+            <div class="candidate-title">价目表（套餐配置）</div>
+            <table class="admin-table admin-table--compact">
+              <thead>
+                <tr>
+                  <th>套餐</th>
+                  <th>次数</th>
+                  <th>总价</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for pkg in price_packages %}
+                <tr>
+                  <td>
+                    <input type="text" name="pkg{{ loop.index }}_label" value="{{ pkg.label | default('') }}" />
+                  </td>
+                  <td>
+                    <input type="number" name="pkg{{ loop.index }}_times" min="1" step="1" value="{{ pkg.times | default(1) }}" />
+                  </td>
+                  <td class="mono">
+                    {% set total_yuan = (pkg.price_yuan if pkg.price_yuan is not none else generation_unit_price * (pkg.times | default(1))) %}
+                    <input
+                      type="number"
+                      name="pkg{{ loop.index }}_price_yuan"
+                      min="0.01"
+                      step="0.01"
+                      value="{{ '%.2f'|format(total_yuan) }}"
+                    />
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <div class="muted" style="margin-top:10px;">
+              每个套餐的总价可单独配置（用于计算订单金额）。普通用户会自动看到最新套餐；设置 label 为空可禁用该套餐。
+            </div>
+            <button type="submit" style="margin-top:10px;">保存套餐</button>
+          </form>
+        </div>
+      </details>
+      <script>
+        (function () {
+          const tabBtns = Array.from(document.querySelectorAll(".admin-orders-tab-btn"));
+          const panels = Array.from(document.querySelectorAll(".admin-orders-tab-panel"));
+          if (!tabBtns.length || !panels.length) return;
+          const show = (id) => {
+            panels.forEach((p) => p.classList.toggle("active", p.id === id));
+            tabBtns.forEach((b) => b.classList.toggle("active", b.dataset.target === id));
+          };
+          tabBtns.forEach((btn) => {
+            btn.addEventListener("click", () => show(btn.dataset.target));
+          });
+        })();
+      </script>
+      <form method="get" action="/admin/users" class="grid3">
+        <input type="hidden" name="view" value="orders" />
+        <label>按用户名筛选
+          <input type="text" name="order_user" value="{{ order_user }}" placeholder="输入用户名" />
+        </label>
+        <label>按状态筛选
+          <select name="order_status">
+            <option value="" {% if not order_status %}selected{% endif %}>全部</option>
+            <option value="created" {% if order_status == 'created' %}selected{% endif %}>created（已申请）</option>
+            <option value="paid" {% if order_status == 'paid' %}selected{% endif %}>paid（已授权）</option>
+            <option value="closed" {% if order_status == 'closed' %}selected{% endif %}>closed（已驳回）</option>
+          </select>
+        </label>
+        <label>每页订单数
+          <select name="order_page_size">
+            <option value="20" {% if order_page_size == 20 %}selected{% endif %}>20</option>
+            <option value="50" {% if order_page_size == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if order_page_size == 100 %}selected{% endif %}>100</option>
+          </select>
+        </label>
+        <input type="hidden" name="order_page" value="1" />
+        <div class="actions-row">
+          <button type="submit">筛选订单</button>
+          <a class="nav-link" href="/admin/users">重置</a>
+          <a class="nav-link" href="/admin/orders/export-csv?order_user={{ order_user }}&order_status={{ order_status }}">导出CSV</a>
+        </div>
+      </form>
+      <div class="muted">共 {{ order_total }} 条申请单，当前第 {{ order_page }} / {{ order_total_pages }} 页。</div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>申请号</th>
+              <th>用户</th>
+              <th>状态</th>
+              <th>申请次数</th>
+                  <th>套餐组合</th>
+              <th>单价</th>
+              <th>总额</th>
+              <th>收款渠道</th>
+              <th>申请备注</th>
+              <th>创建时间</th>
+              <th>审核时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in admin_orders %}
+            <tr>
+              <td class="mono">{{ o.order_no }}</td>
+              <td>{{ o.username }}</td>
+              <td><span class="order-badge order-{{ o.status }}">{{ o.status_label }}</span></td>
+              <td>{{ o.buy_times }}</td>
+              <td>{{ o.combo_label or "-" }}</td>
+              <td>{{ o.unit_price_yuan }}</td>
+              <td>{{ o.total_amount_yuan }}</td>
+              <td>{{ o.pay_channel or "-" }}</td>
+              <td>{{ o.payer_note or "-" }}</td>
+              <td>{{ o.created_at }}</td>
+              <td>{{ o.paid_at or "-" }}</td>
+              <td>
+                <div class="actions-row">
+                  {% if o.status == "created" %}
+                    <form method="post" action="/admin/orders/{{ o.order_no }}/mark-paid" class="inline">
+                      <button type="submit">通过并授权次数</button>
+                    </form>
+                    <form method="post" action="/admin/orders/{{ o.order_no }}/close" class="inline">
+                      <button type="submit" class="btn-muted">驳回申请</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="/admin/orders/{{ o.order_no }}/delete" class="inline">
+                      <button type="submit" class="btn-danger">删除申请</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12" class="muted">暂无申请记录</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <section class="card inner-card" style="margin-top:14px;">
+        <h3 style="margin:0 0 10px;">用户留言建议（可删除）</h3>
+        <div class="muted" style="margin-bottom:10px;">
+          本页申请单对应的建议总数：{{ message_stats.total_messages }}。
+          客服码：{{ message_stats.by_channel.get('customer_service_wechat', 0) }}，
+          微信码：{{ message_stats.by_channel.get('wechat', 0) }}，
+          支付宝码：{{ message_stats.by_channel.get('alipay', 0) }}。
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table admin-table--compact">
+            <thead>
+              <tr>
+                <th>编号</th>
+                <th>用户</th>
+                <th>渠道</th>
+                <th>建议内容</th>
+                <th>时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in message_rows %}
+              <tr>
+                <td class="mono">{{ m.id }}</td>
+                <td>{{ m.username }}</td>
+                <td>{{ m.pay_channel or "-" }}</td>
+                <td style="max-width:520px;">
+                  <div class="payload-pre">{{ m.content }}</div>
+                  {% if m.admin_reply %}
+                    <div class="admin-reply">
+                      <b>管理员反馈：</b>
+                      <span class="payload-pre">{{ m.admin_reply }}</span>
+                    </div>
+                  {% endif %}
+                </td>
+                <td>{{ m.created_at }}</td>
+                <td>
+                  <details>
+                    <summary class="btn-muted" style="cursor:pointer; list-style: none; display:inline-block; padding:8px 12px; border-radius:8px;">回复/修改反馈</summary>
+                    <div style="margin-top:10px;">
+                      <form method="post" action="/admin/messages/{{ m.id }}/reply" style="display:flex; flex-direction:column; gap:6px;">
+                        <textarea name="admin_reply" rows="3" placeholder="管理员给与的回复/反馈内容" required>{{ m.admin_reply or '' }}</textarea>
+                        <button type="submit" style="margin-top:8px;">提交反馈</button>
+                      </form>
+                      <form method="post" action="/admin/messages/{{ m.id }}/delete" style="margin-top:0;">
+                        <button type="submit" class="btn-danger">删除</button>
+                      </form>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="muted">暂无留言建议</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <div class="actions-row">
+        {% if order_page > 1 %}
+        <a class="nav-link" href="/admin/users?view=orders&order_user={{ order_user }}&order_status={{ order_status }}&order_page_size={{ order_page_size }}&order_page={{ order_page - 1 }}">上一页</a>
+        {% else %}
+        <span class="muted">上一页</span>
+        {% endif %}
+        {% if order_page < order_total_pages %}
+        <a class="nav-link" href="/admin/users?view=orders&order_user={{ order_user }}&order_status={{ order_status }}&order_page_size={{ order_page_size }}&order_page={{ order_page + 1 }}">下一页</a>
+        {% else %}
+        <span class="muted">下一页</span>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

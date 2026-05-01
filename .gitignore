@@ -1,0 +1,54 @@
+# Environment and local secrets
+.env
+.env.*
+*.env
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+configs/model_config.yaml
+configs/*key*
+configs/*secret*
+user_auth_store.json
+
+# Runtime data and generated outputs
+user_data/
+results/
+logs/
+pay_pic/
+ScreenShot_*.png
+deploy_health.log
+nohup.out
+*.log
+*.tmp
+*.bak
+
+# Databases and dumps
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.dump
+*.sql.gz
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Frontend/editor/build artifacts
+node_modules/
+dist/
+build/
+.idea/
+.vscode/
+.cursor/
+terminals/
+Desktop.ini
+Thumbs.db
+.DS_Store

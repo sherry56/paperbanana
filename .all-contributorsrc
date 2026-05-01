@@ -1,0 +1,148 @@
+{
+  "projectName": "PaperBanana",
+  "projectOwner": "dwzhu-pku",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitConvention": "none",
+  "contributorsPerLine": 6,
+  "contributors": [
+    {
+      "login": "dwzhu-pku",
+      "name": "Dawei Zhu",
+      "avatar_url": "https://github.com/dwzhu-pku.png",
+      "profile": "https://github.com/dwzhu-pku",
+      "contributions": [
+        "code",
+        "ideas",
+        "doc"
+      ]
+    },
+    {
+      "login": "lemon-prog123",
+      "name": "lemon-prog123",
+      "avatar_url": "https://github.com/lemon-prog123.png",
+      "profile": "https://github.com/lemon-prog123",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "memray",
+      "name": "memray",
+      "avatar_url": "https://github.com/memray.png",
+      "profile": "https://github.com/memray",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "elpsykongloo",
+      "name": "elpsykongloo",
+      "avatar_url": "https://github.com/elpsykongloo.png",
+      "profile": "https://github.com/elpsykongloo",
+      "contributions": [
+        "bug",
+        "ideas"
+      ]
+    },
+    {
+      "login": "weathon",
+      "name": "weathon",
+      "avatar_url": "https://github.com/weathon.png",
+      "profile": "https://github.com/weathon",
+      "contributions": [
+        "bug"
+      ]
+    },
+    {
+      "login": "arashabadi",
+      "name": "arashabadi",
+      "avatar_url": "https://github.com/arashabadi.png",
+      "profile": "https://github.com/arashabadi",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "Ludobico",
+      "name": "Ludobico",
+      "avatar_url": "https://github.com/Ludobico.png",
+      "profile": "https://github.com/Ludobico",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "haosenwang1018",
+      "name": "haosenwang1018",
+      "avatar_url": "https://github.com/haosenwang1018.png",
+      "profile": "https://github.com/haosenwang1018",
+      "contributions": [
+        "code",
+        "bug"
+      ]
+    },
+    {
+      "login": "stuinfla",
+      "name": "stuinfla",
+      "avatar_url": "https://github.com/stuinfla.png",
+      "profile": "https://github.com/stuinfla",
+      "contributions": [
+        "code",
+        "ideas"
+      ]
+    },
+    {
+      "login": "ReturnYG",
+      "name": "ReturnYG",
+      "avatar_url": "https://github.com/ReturnYG.png",
+      "profile": "https://github.com/ReturnYG",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "Mylszd",
+      "name": "Mylszd",
+      "avatar_url": "https://github.com/Mylszd.png",
+      "profile": "https://github.com/Mylszd",
+      "contributions": [
+        "ideas",
+        "tool"
+      ]
+    },
+    {
+      "login": "NielsRogge",
+      "name": "NielsRogge",
+      "avatar_url": "https://github.com/NielsRogge.png",
+      "profile": "https://github.com/NielsRogge",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "MinyuChan-vem",
+      "name": "MinyuChan-vem",
+      "avatar_url": "https://github.com/MinyuChan-vem.png",
+      "profile": "https://github.com/MinyuChan-vem",
+      "contributions": [
+        "bug"
+      ]
+    },
+    {
+      "login": "catallactics",
+      "name": "catallactics",
+      "avatar_url": "https://avatars.githubusercontent.com/u/223395626?v=4",
+      "profile": "https://github.com/catallactics",
+      "contributions": [
+        "ideas"
+      ]
+    }
+  ],
+  "commitType": "docs"
+}

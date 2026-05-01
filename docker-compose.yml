@@ -1,0 +1,53 @@
+services:
+  paperbanana-mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      - MYSQL_ROOT_PASSWORD=${PAPERBANANA_MYSQL_ROOT_PASSWORD:-root_password}
+      - MYSQL_DATABASE=${PAPERBANANA_DB_NAME:-paperbanana}
+      - MYSQL_USER=${PAPERBANANA_DB_USER:-paperbanana}
+      - MYSQL_PASSWORD=${PAPERBANANA_DB_PASSWORD:-paperbanana_password}
+    volumes:
+      - paperbanana_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  paperbanana:
+    build: .
+    image: paperbanana-demo:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - PB_DB_HOST=${PAPERBANANA_DB_HOST:-paperbanana-mysql}
+      - PB_DB_PORT=${PAPERBANANA_DB_PORT:-3306}
+      - PB_DB_USER=${PAPERBANANA_DB_USER:-paperbanana}
+      - PB_DB_PASSWORD=${PAPERBANANA_DB_PASSWORD:-paperbanana_password}
+      - PB_DB_NAME=${PAPERBANANA_DB_NAME:-paperbanana}
+      # Shared secret for sub2api -> PaperBanana internal API calls.
+      # Must match RESEARCH_DRAWING_SERVICE_TOKEN on the sub2api side.
+      - PB_REQUIRE_SUB2API_SERVICE_TOKEN=${PB_REQUIRE_SUB2API_SERVICE_TOKEN:-true}
+      - PB_SUB2API_SERVICE_TOKEN=${PB_SUB2API_SERVICE_TOKEN:-test_research_drawing_token_123456}
+    volumes:
+      # Gallery & per-user files (create ./user_data on host if missing)
+      - ./user_data:/app/user_data
+      # Reference data and configs are mounted read-only.
+      - ./data:/app/data:ro
+      - ./configs:/app/configs:ro
+    depends_on:
+      paperbanana-mysql:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - research-drawing-service
+
+volumes:
+  paperbanana_mysql_data:
+    driver: local
