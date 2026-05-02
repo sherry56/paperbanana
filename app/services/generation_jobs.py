@@ -224,6 +224,8 @@ def spawn_generation_job(
     main_model_name: str,
     image_gen_model_name: str,
     quota_need: int,
+    gpt_image_api_key: str = "",
+    gpt_image_base_url: str = "",
 ) -> str:
     _cleanup_stale()
     job_id = uuid.uuid4().hex
@@ -259,6 +261,8 @@ def spawn_generation_job(
                 retrieval_setting=retrieval_setting,
                 main_model_name=main_model_name,
                 image_gen_model_name=image_gen_model_name,
+                gpt_image_api_key=gpt_image_api_key,
+                gpt_image_base_url=gpt_image_base_url,
                 max_concurrent=max_concurrent,
             )
             elapsed_sec = max(1, int(time.perf_counter() - t0))

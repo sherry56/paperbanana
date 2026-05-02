@@ -51,6 +51,8 @@ async def process_parallel_candidates(
     retrieval_setting: str,
     main_model_name: str,
     image_gen_model_name: str,
+    gpt_image_api_key: str = "",
+    gpt_image_base_url: str = "",
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
 ) -> list[dict[str, Any]]:
     exp_config = config.ExpConfig(
@@ -60,6 +62,8 @@ async def process_parallel_candidates(
         retrieval_setting=retrieval_setting,
         main_model_name=main_model_name,
         image_gen_model_name=image_gen_model_name,
+        gpt_image_api_key=gpt_image_api_key,
+        gpt_image_base_url=gpt_image_base_url,
         work_dir=Path(__file__).resolve().parents[2],
     )
     processor = PaperVizProcessor(
@@ -86,6 +90,8 @@ def run_parallel_candidates_sync(
     retrieval_setting: str,
     main_model_name: str,
     image_gen_model_name: str,
+    gpt_image_api_key: str = "",
+    gpt_image_base_url: str = "",
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
 ) -> list[dict[str, Any]]:
     return asyncio.run(
@@ -95,6 +101,8 @@ def run_parallel_candidates_sync(
             retrieval_setting=retrieval_setting,
             main_model_name=main_model_name,
             image_gen_model_name=image_gen_model_name,
+            gpt_image_api_key=gpt_image_api_key,
+            gpt_image_base_url=gpt_image_base_url,
             max_concurrent=max_concurrent,
         )
     )

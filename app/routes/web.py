@@ -935,6 +935,10 @@ async def sub2api_generate(request: Request):
         max_critic_rounds = 3
     main_model_name = str(payload.get("main_model_name") or "").strip()
     image_gen_model_name = str(payload.get("image_gen_model_name") or "").strip()
+    if image_gen_model_name in {"gpt-5.5-image2", "openrouter/openai/gpt-5.4-image-2"}:
+        image_gen_model_name = "gpt-image-2"
+    gpt_image_api_key = str(payload.get("gpt_image_api_key") or "").strip()
+    gpt_image_base_url = str(payload.get("gpt_image_base_url") or "").strip().rstrip("/")
     quota_need = max(1, int(num_candidates)) * (1 + max(1, int(max_critic_rounds)))
 
     data_list = create_sample_inputs(
@@ -952,6 +956,8 @@ async def sub2api_generate(request: Request):
         main_model_name=main_model_name,
         image_gen_model_name=image_gen_model_name,
         quota_need=quota_need,
+        gpt_image_api_key=gpt_image_api_key,
+        gpt_image_base_url=gpt_image_base_url,
     )
     return JSONResponse(
         {
