@@ -73,6 +73,16 @@ if openai_api_key:
 else:
     openai_client = None
 
+gpt_api_key = get_config_val("api_keys", "gpt_api_key", "GPT_API_KEY", "")
+gpt_base_url = get_config_val("api_base_urls", "gpt_base_url", "GPT_BASE_URL", "https://api.openai.com/v1")
+if gpt_api_key:
+    gpt_text_client = AsyncOpenAI(
+        base_url=gpt_base_url.rstrip("/"),
+        api_key=gpt_api_key,
+    )
+else:
+    gpt_text_client = None
+
 gpt_image_api_key = get_config_val("api_keys", "gpt_image_api_key", "GPT_IMAGE_API_KEY", "")
 gpt_image_base_url = get_config_val("api_base_urls", "gpt_image_base_url", "GPT_IMAGE_BASE_URL", "https://api.openai.com/v1")
 if gpt_image_api_key:
@@ -361,6 +371,11 @@ async def call_openai_with_retry_async(
     candidate_num = config["candidate_num"]
     max_completion_tokens = config["max_completion_tokens"]
     response_text_list = []
+    model_name = _normalize_gpt_text_model_id(model_name)
+    text_client = gpt_text_client if model_name == "gpt-5.5" else openai_client
+    if text_client is None:
+        key_name = "GPT_API_KEY" if model_name == "gpt-5.5" else "OPENAI_API_KEY"
+        raise RuntimeError(f"OpenAI text client was not initialized: missing {key_name}.")
 
     # --- Preparation Phase ---
     # Convert to the OpenAI-specific format
@@ -373,7 +388,7 @@ async def call_openai_with_retry_async(
         try:
             openai_contents = _convert_to_openai_format(current_contents)
             # Attempt to generate the very first candidate.
-            first_response = await openai_client.chat.completions.create(
+            first_response = await text_client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -417,7 +432,7 @@ async def call_openai_with_retry_async(
         )
         valid_openai_contents = _convert_to_openai_format(current_contents)
         tasks = [
-            openai_client.chat.completions.create(
+            text_client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -804,6 +819,13 @@ def _to_openrouter_model_id(model_name: str) -> str:
     return model_name
 
 
+def _normalize_gpt_text_model_id(model_name: str) -> str:
+    normalized = (model_name or "").strip()
+    if normalized in {"gpt5.5", "openrouter/openai/gpt-5.5"}:
+        return "gpt-5.5"
+    return normalized
+
+
 async def call_model_with_retry_async(
     model_name, contents, config, max_attempts=5, retry_delay=5, error_context=""
 ):
@@ -817,6 +839,7 @@ async def call_model_with_retry_async(
          Priority: OpenRouter > Gemini > Anthropic > OpenAI
     """
     # Explicit provider prefix overrides auto-detection
+    model_name = _normalize_gpt_text_model_id(model_name)
     if model_name.startswith("openrouter/"):
         provider = "openrouter"
         actual_model = model_name[len("openrouter/"):]
@@ -836,7 +859,7 @@ async def call_model_with_retry_async(
             provider = "gemini"
         elif anthropic_client is not None:
             provider = "anthropic"
-        elif openai_client is not None:
+        elif openai_client is not None or gpt_text_client is not None:
             provider = "openai"
         else:
             raise RuntimeError(

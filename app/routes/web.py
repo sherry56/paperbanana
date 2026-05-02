@@ -862,6 +862,8 @@ def generate_submit(
         main_model_name = cfg.get("main_model_name", main_model_name)
         image_gen_model_name = cfg.get("image_gen_model_name", image_gen_model_name)
     main_model_name = (main_model_name or "").strip()
+    if main_model_name in {"gpt5.5", "openrouter/openai/gpt-5.5"}:
+        main_model_name = "gpt-5.5"
     image_gen_model_name = (image_gen_model_name or "").strip()
     need = max(1, int(num_candidates)) * (1 + max(1, int(max_critic_rounds)))
     ok_quota, msg_quota = consume_user_generation_quota(db, user["username"], need)
@@ -934,6 +936,8 @@ async def sub2api_generate(request: Request):
     except Exception:
         max_critic_rounds = 3
     main_model_name = str(payload.get("main_model_name") or "").strip()
+    if main_model_name in {"gpt5.5", "openrouter/openai/gpt-5.5"}:
+        main_model_name = "gpt-5.5"
     image_gen_model_name = str(payload.get("image_gen_model_name") or "").strip()
     if image_gen_model_name in {"gpt-5.5-image2", "openrouter/openai/gpt-5.4-image-2"}:
         image_gen_model_name = "gpt-image-2"
