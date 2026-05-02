@@ -136,8 +136,8 @@ class VanillaAgent(BaseAgent):
                     "quality": "high",
                     "background": "opaque",
                     "output_format": "png",
-                    "gpt_image_api_key": self.exp_config.gpt_image_api_key,
-                    "gpt_image_base_url": self.exp_config.gpt_image_base_url,
+                    "gpt_api_key": self.exp_config.gpt_api_key,
+                    "gpt_base_url": self.exp_config.gpt_base_url,
                 }
                 response_list = await generation_utils.call_openai_image_generation_with_retry_async(
                     model_name=self.model_name,
