@@ -75,6 +75,8 @@ else:
 
 gpt_api_key = get_config_val("api_keys", "gpt_api_key", "GPT_API_KEY", "")
 gpt_base_url = get_config_val("api_base_urls", "gpt_base_url", "GPT_BASE_URL", "https://api.openai.com/v1")
+gpt_image_api_key = get_config_val("api_keys", "gpt_image_api_key", "GPT_IMAGE_API_KEY", "")
+gpt_image_base_url = get_config_val("api_base_urls", "gpt_image_base_url", "GPT_IMAGE_BASE_URL", "")
 if gpt_api_key:
     gpt_text_client = AsyncOpenAI(
         base_url=gpt_base_url.rstrip("/"),
@@ -92,6 +94,88 @@ if openrouter_api_key:
 else:
     openrouter_client = None
 
+
+def _response_preview(text: str, limit: int = 300) -> str:
+    return (text or "")[:limit].replace("\n", "\\n").replace("\r", "\\r")
+
+
+def _log_gpt_image_response(url: str, model_name: str, status_code: int | str, content_type: str, body_text: str) -> None:
+    message = (
+        "[GPT Image] final image url="
+        f"{url} image_model={model_name} status_code={status_code} "
+        f"content_type={content_type or '-'} response_preview={_response_preview(body_text)}"
+    )
+    print(message, flush=True)
+    logger.info(message)
+
+
+def _is_html_response(content_type: str, body_text: str) -> bool:
+    return "text/html" in (content_type or "").lower() or (body_text or "").lstrip().lower().startswith("<html")
+
+
+async def _call_gpt_image_2_http_async(model_name: str, prompt: str, config: Dict[str, Any]) -> List[str]:
+    size = config.get("size", "1536x1024")
+    request_api_key = (
+        (config.get("gpt_image_api_key") or "").strip()
+        or (config.get("gpt_api_key") or "").strip()
+        or gpt_image_api_key.strip()
+        or gpt_api_key.strip()
+    )
+    request_base_url = (
+        (config.get("gpt_image_base_url") or "").strip()
+        or (config.get("gpt_base_url") or "").strip()
+        or gpt_image_base_url.strip()
+        or gpt_base_url.strip()
+    ).rstrip("/")
+
+    if not request_api_key:
+        raise RuntimeError("GPT Image client was not initialized: missing GPT_IMAGE_API_KEY or GPT_API_KEY.")
+    if not request_base_url:
+        raise RuntimeError("GPT Image base URL is not configured: missing GPT_IMAGE_BASE_URL or GPT_BASE_URL.")
+
+    url = f"{request_base_url}/images/generations"
+    payload = {
+        "model": "gpt-image-2",
+        "prompt": prompt,
+        "size": size,
+    }
+    headers = {
+        "Authorization": f"Bearer {request_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
+        response = await client.post(url, headers=headers, json=payload)
+
+    content_type = response.headers.get("content-type", "")
+    body_text = response.text or ""
+    _log_gpt_image_response(url, model_name, response.status_code, content_type, body_text)
+
+    if response.status_code < 200 or response.status_code >= 300:
+        return ["Error"]
+    if _is_html_response(content_type, body_text):
+        return ["Error"]
+    if "json" not in content_type.lower():
+        return ["Error"]
+
+    try:
+        data = response.json()
+    except ValueError:
+        return ["Error"]
+
+    b64_json = None
+    if isinstance(data, dict):
+        items = data.get("data")
+        if isinstance(items, list) and items:
+            first_item = items[0]
+            if isinstance(first_item, dict):
+                b64_json = first_item.get("b64_json")
+
+    if isinstance(b64_json, str) and b64_json.strip():
+        return [b64_json.strip()]
+
+    _log_gpt_image_response(url, model_name, response.status_code, content_type, body_text)
+    return ["Error"]
 
 
 def _convert_to_gemini_parts(contents: List[Dict[str, Any]]) -> List[types.Part]:
@@ -451,6 +535,10 @@ async def call_openai_image_generation_with_retry_async(
     """
     ASYNC: Call OpenAI Image Generation API (GPT-Image) with asynchronous retry logic.
     """
+    normalized_model_name = (model_name or "").strip()
+    if normalized_model_name == "gpt-image-2":
+        return await _call_gpt_image_2_http_async(normalized_model_name, prompt, config)
+
     size = config.get("size", "1536x1024")
     quality = config.get("quality", "high")
     background = config.get("background", "opaque")

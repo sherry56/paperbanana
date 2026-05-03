@@ -25,7 +25,9 @@ api_keys:
   openai_api_key: ""
   anthropic_api_key: ""
   openrouter_api_key: "" # e.g. "sk-or-v1-xxxxx". Set model_name to "openrouter/<model>" to use.
-  gpt_api_key: "" # Used by GPT text and image models such as "gpt-5.5" and "gpt-image-2".
+  gpt_api_key: "" # Used by GPT text and, as fallback, image models such as "gpt-5.5" and "gpt-image-2".
+  gpt_image_api_key: "" # Optional override used only by GPT Image models such as "gpt-image-2".
 
 api_base_urls:
   gpt_base_url: "https://api.openai.com/v1"
+  gpt_image_base_url: "" # Optional override for GPT Image models. Falls back to gpt_base_url when empty.
