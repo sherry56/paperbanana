@@ -216,13 +216,20 @@ class VisualizerAgent(BaseAgent):
             # Post-process based on task type
             if cfg["use_image_generation"]:
                 # Convert PNG to JPG
+                generated_b64 = response_list[0]
                 converted_jpg = await asyncio.to_thread(
-                    image_utils.convert_png_b64_to_jpg_b64, response_list[0]
+                    image_utils.convert_png_b64_to_jpg_b64, generated_b64
                 )
                 if converted_jpg:
                     data[f"{desc_key}_base64_jpg"] = converted_jpg
+                elif generated_b64 != "Error":
+                    data[f"{desc_key}_base64_jpg"] = generated_b64
+                    print(
+                        f"⚠️  Skipping {desc_key}: image conversion failed; using raw image base64 "
+                        f"(len={len(generated_b64)})"
+                    )
                 else:
-                    print(f"⚠️  Skipping {desc_key}: image conversion failed")
+                    print(f"⚠️  Skipping {desc_key}: image generation returned Error")
             else:
                 # Plot: execute generated code
                 raw_code = response_list[0]

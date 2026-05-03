@@ -108,15 +108,33 @@ def run_parallel_candidates_sync(
     )
 
 
+def _result_image_keys(result: dict[str, Any]) -> list[str]:
+    return sorted(key for key, value in result.items() if "base64" in key or key.endswith("_b64") or key.endswith("_b64_json"))
+
+
 def base64_to_image(b64_str: str) -> Image.Image | None:
     if not b64_str:
+        print("[ResearchDrawing] image base64 missing")
         return None
     try:
         if "," in b64_str:
             b64_str = b64_str.split(",")[1]
-        image_data = base64.b64decode(b64_str)
-        return Image.open(BytesIO(image_data))
-    except Exception:
+        b64_str = b64_str.strip()
+        image_data = base64.b64decode(b64_str, validate=False)
+        print(
+            f"[ResearchDrawing] image base64 exists=True b64_len={len(b64_str)} "
+            f"decoded_bytes_len={len(image_data)}",
+            flush=True,
+        )
+        image = Image.open(BytesIO(image_data))
+        image.load()
+        return image
+    except Exception as exc:
+        print(
+            f"[ResearchDrawing] image base64 decode/open failed: b64_len={len(b64_str) if b64_str else 0} "
+            f"error={exc}",
+            flush=True,
+        )
         return None
 
 
@@ -137,11 +155,22 @@ def extract_final_diagram_b64_from_result(result: dict[str, Any], exp_mode: str)
 def result_image_to_png_bytes(result: dict[str, Any], exp_mode: str) -> bytes | None:
     b64 = extract_final_diagram_b64_from_result(result, exp_mode)
     if not b64:
+        print(
+            "[ResearchDrawing] candidate image empty before decode: "
+            f"exp_mode={exp_mode} result_keys={sorted(result.keys())} image_keys={_result_image_keys(result)}",
+            flush=True,
+        )
         return None
     img = base64_to_image(b64)
     if not img:
+        print(
+            "[ResearchDrawing] candidate image decode failed: "
+            f"exp_mode={exp_mode} b64_exists=True b64_len={len(b64)} image_keys={_result_image_keys(result)}",
+            flush=True,
+        )
         return None
     buf = BytesIO()
     img.save(buf, format="PNG")
+    print(f"[ResearchDrawing] candidate PNG bytes len={buf.tell()}", flush=True)
     return buf.getvalue()
 

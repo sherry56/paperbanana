@@ -185,7 +185,18 @@ class VanillaAgent(BaseAgent):
         
         output_key = f"vanilla_{cfg['task_name']}_base64_jpg"
         if cfg["use_image_generation"]:
-            data[output_key] = await asyncio.to_thread(image_utils.convert_png_b64_to_jpg_b64, response_list[0])
+            generated_b64 = response_list[0] if response_list else ""
+            converted_jpg = await asyncio.to_thread(image_utils.convert_png_b64_to_jpg_b64, generated_b64)
+            if converted_jpg:
+                data[output_key] = converted_jpg
+            elif generated_b64 and generated_b64 != "Error":
+                data[output_key] = generated_b64
+                print(
+                    f"⚠️  Image conversion failed for {output_key}; using raw image base64 "
+                    f"(len={len(generated_b64)})"
+                )
+            else:
+                print(f"⚠️  Image generation returned no usable image for {output_key}")
         else:
             if response_list and response_list[0]:
                 raw_code = response_list[0]

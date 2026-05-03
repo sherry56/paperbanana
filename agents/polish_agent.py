@@ -215,12 +215,20 @@ class PolishAgent(BaseAgent):
             
             if response_list and response_list[0]:
                 # Convert PNG to JPG
-                converted_jpg = image_utils.convert_png_b64_to_jpg_b64(response_list[0])
+                generated_b64 = response_list[0]
+                converted_jpg = image_utils.convert_png_b64_to_jpg_b64(generated_b64)
                 if converted_jpg:
                     output_key = f"polished_{task_name}_base64_jpg"
                     data[output_key] = converted_jpg
+                elif generated_b64 != "Error":
+                    output_key = f"polished_{task_name}_base64_jpg"
+                    data[output_key] = generated_b64
+                    print(
+                        f"⚠️  Image conversion failed; using raw image base64 "
+                        f"(len={len(generated_b64)})"
+                    )
                 else:
-                    print(f"⚠️  Image conversion failed")
+                    print(f"⚠️  Image generation returned Error")
             else:
                 print(f"⚠️  No response from model")
                 

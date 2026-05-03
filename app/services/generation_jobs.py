@@ -276,13 +276,28 @@ def spawn_generation_job(
             for i, r in enumerate(results):
                 # Convert candidate result to PNG immediately, so later UI/save/download never relies on base64/raw blobs.
                 png = result_image_to_png_bytes(r, exp_mode)
-                if not png:
-                    raise RuntimeError(f"candidate image empty: candidate_{i}")
                 out_path = job_dir / f"candidate_{i}.png"
+                if not png:
+                    print(
+                        "[ResearchDrawing] candidate image empty before save: "
+                        f"candidate_id={i} save_path={out_path} result_keys={sorted(r.keys())}",
+                        flush=True,
+                    )
+                    raise RuntimeError(f"candidate image empty: candidate_{i}")
                 try:
                     out_path.write_bytes(png)
                 except OSError as e:
+                    print(
+                        "[ResearchDrawing] candidate image save failed: "
+                        f"candidate_id={i} png_bytes_len={len(png)} save_path={out_path} error={e}",
+                        flush=True,
+                    )
                     raise RuntimeError(f"写入候选文件失败: {out_path} ({e})") from e
+                print(
+                    "[ResearchDrawing] candidate image saved: "
+                    f"candidate_id={i} png_bytes_len={len(png)} save_path={out_path}",
+                    flush=True,
+                )
                 rows.append({"candidate_id": i})
             with _lock:
                 j = _jobs.get(job_id)

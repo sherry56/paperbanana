@@ -113,6 +113,21 @@ def _is_html_response(content_type: str, body_text: str) -> bool:
     return "text/html" in (content_type or "").lower() or (body_text or "").lstrip().lower().startswith("<html")
 
 
+def _summarize_gpt_image_json(data: Any) -> str:
+    if not isinstance(data, dict):
+        return f"type={type(data).__name__}"
+    items = data.get("data")
+    first = items[0] if isinstance(items, list) and items else None
+    first_keys = sorted(first.keys()) if isinstance(first, dict) else []
+    b64 = first.get("b64_json") if isinstance(first, dict) else None
+    return (
+        f"top_keys={sorted(data.keys())} data_type={type(items).__name__} "
+        f"data_len={len(items) if isinstance(items, list) else 0} first_keys={first_keys} "
+        f"b64_json_exists={isinstance(b64, str) and bool(b64.strip())} "
+        f"b64_json_len={len(b64) if isinstance(b64, str) else 0}"
+    )
+
+
 async def _call_gpt_image_2_http_async(model_name: str, prompt: str, config: Dict[str, Any]) -> List[str]:
     size = config.get("size", "1536x1024")
     request_api_key = (
@@ -163,6 +178,10 @@ async def _call_gpt_image_2_http_async(model_name: str, prompt: str, config: Dic
     except ValueError:
         return ["Error"]
 
+    summary = _summarize_gpt_image_json(data)
+    print(f"[GPT Image] response structure: {summary}", flush=True)
+    logger.info("[GPT Image] response structure: %s", summary)
+
     b64_json = None
     if isinstance(data, dict):
         items = data.get("data")
@@ -172,9 +191,23 @@ async def _call_gpt_image_2_http_async(model_name: str, prompt: str, config: Dic
                 b64_json = first_item.get("b64_json")
 
     if isinstance(b64_json, str) and b64_json.strip():
+        try:
+            decoded = base64.b64decode(b64_json, validate=False)
+            print(
+                f"[GPT Image] b64_json exists=True b64_json_len={len(b64_json)} decoded_bytes_len={len(decoded)}",
+                flush=True,
+            )
+            logger.info("[GPT Image] b64_json_len=%s decoded_bytes_len=%s", len(b64_json), len(decoded))
+        except Exception as exc:
+            print(
+                f"[GPT Image] b64_json exists=True b64_json_len={len(b64_json)} decode_failed={exc}",
+                flush=True,
+            )
+            logger.warning("[GPT Image] failed to decode b64_json: %s", exc)
         return [b64_json.strip()]
 
-    _log_gpt_image_response(url, model_name, response.status_code, content_type, body_text)
+    print(f"[GPT Image] missing data[0].b64_json; response structure: {summary}", flush=True)
+    logger.warning("[GPT Image] missing data[0].b64_json; response structure: %s", summary)
     return ["Error"]
 
 
