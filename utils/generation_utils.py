@@ -53,6 +53,33 @@ def get_config_val(section, key, env_var, default=""):
         val = model_config[section].get(key)
     return val or default
 
+def _normalize_base_url(value: Any) -> str:
+    return str(value or "").strip().rstrip("/")
+
+def _get_model_config_base_url(key: str) -> str:
+    api_base_urls = model_config.get("api_base_urls", {})
+    if isinstance(api_base_urls, dict):
+        return _normalize_base_url(api_base_urls.get(key))
+    return ""
+
+def _resolve_gpt_image_base_url(config: Dict[str, Any]) -> str:
+    """
+    Resolve GPT image generation base URL without using the api.openai.com default.
+    """
+    candidates = (
+        config.get("gpt_image_base_url"),
+        os.getenv("GPT_IMAGE_BASE_URL"),
+        config.get("gpt_base_url"),
+        os.getenv("GPT_BASE_URL"),
+        _get_model_config_base_url("gpt_image_base_url"),
+        _get_model_config_base_url("gpt_base_url"),
+    )
+    for candidate in candidates:
+        base_url = _normalize_base_url(candidate)
+        if base_url:
+            return base_url
+    return ""
+
 # Initialize clients lazily or with robust defaults
 api_key = get_config_val("api_keys", "google_api_key", "GOOGLE_API_KEY", "")
 if api_key:
@@ -136,12 +163,7 @@ async def _call_gpt_image_2_http_async(model_name: str, prompt: str, config: Dic
         or gpt_image_api_key.strip()
         or gpt_api_key.strip()
     )
-    request_base_url = (
-        (config.get("gpt_image_base_url") or "").strip()
-        or (config.get("gpt_base_url") or "").strip()
-        or gpt_image_base_url.strip()
-        or gpt_base_url.strip()
-    ).rstrip("/")
+    request_base_url = _resolve_gpt_image_base_url(config)
 
     if not request_api_key:
         raise RuntimeError("GPT Image client was not initialized: missing GPT_IMAGE_API_KEY or GPT_API_KEY.")
@@ -577,13 +599,17 @@ async def call_openai_image_generation_with_retry_async(
     background = config.get("background", "opaque")
     output_format = config.get("output_format", "png")
     request_api_key = (config.get("gpt_api_key") or "").strip()
-    request_base_url = (config.get("gpt_base_url") or "").strip().rstrip("/") or gpt_base_url.rstrip("/")
-    image_client = AsyncOpenAI(base_url=request_base_url, api_key=request_api_key) if request_api_key else gpt_text_client
-    if image_client is None:
+    request_base_url = _resolve_gpt_image_base_url(config)
+    if not request_api_key:
         raise RuntimeError(
             "GPT Image client was not initialized: missing GPT_API_KEY. "
             "Set GPT_API_KEY/GPT_BASE_URL, or configure api_keys.gpt_api_key."
         )
+    if not request_base_url:
+        raise RuntimeError(
+            "GPT Image base URL is not configured: missing GPT_IMAGE_BASE_URL or GPT_BASE_URL."
+        )
+    image_client = AsyncOpenAI(base_url=request_base_url, api_key=request_api_key)
     
     # Base parameters for all models
     gen_params = {
