@@ -34,6 +34,20 @@ from .config import ExpConfig
 from .eval_toolkits import get_score_for_image_referenced
 
 
+def _image_result_keys(data: Dict[str, Any]) -> list[str]:
+    return sorted(
+        key
+        for key, value in data.items()
+        if value
+        and (
+            "base64" in key
+            or key.endswith("_b64")
+            or key.endswith("_b64_json")
+            or key in {"image", "image_base64"}
+        )
+    )
+
+
 class PaperVizProcessor:
     """Main class for multimodal document processor"""
 
@@ -166,8 +180,22 @@ class PaperVizProcessor:
 
         if do_eval:
             data_with_eval = await self.evaluation_function(data, exp_config=self.exp_config)
+            print(
+                "[PaperVizProcessor] final agent image fields: "
+                f"candidate_id={data_with_eval.get('candidate_id')} "
+                f"eval_image_field={data_with_eval.get('eval_image_field')} "
+                f"image_keys={_image_result_keys(data_with_eval)}",
+                flush=True,
+            )
             return data_with_eval
         else:
+            print(
+                "[PaperVizProcessor] final agent image fields: "
+                f"candidate_id={data.get('candidate_id')} "
+                f"eval_image_field={data.get('eval_image_field')} "
+                f"image_keys={_image_result_keys(data)}",
+                flush=True,
+            )
             return data
 
     async def process_queries_batch(

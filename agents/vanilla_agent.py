@@ -28,6 +28,27 @@ from utils import generation_utils, image_utils
 from .base_agent import BaseAgent
 
 
+def _image_result_keys(data: Dict[str, Any]) -> list[str]:
+    return sorted(
+        key
+        for key, value in data.items()
+        if value and ("base64" in key or key.endswith("_b64") or key.endswith("_b64_json") or key in {"image", "image_base64"})
+    )
+
+
+def _record_image_result(data: Dict[str, Any], output_key: str) -> None:
+    image_b64 = data.get(output_key)
+    if not image_b64:
+        return
+    data["image_base64"] = image_b64
+    data["image_field"] = output_key
+    print(
+        f"[Vanilla] recorded image field={output_key} generic_field=image_base64 "
+        f"b64_len={len(image_b64)}",
+        flush=True,
+    )
+
+
 def _execute_plot_code_worker(code_text: str) -> str:
     """
     Independent plot code execution worker:
@@ -186,6 +207,11 @@ class VanillaAgent(BaseAgent):
         output_key = f"vanilla_{cfg['task_name']}_base64_jpg"
         if cfg["use_image_generation"]:
             generated_b64 = response_list[0] if response_list else ""
+            print(
+                f"[Vanilla] model={self.model_name} received_fields=response_list[0] "
+                f"b64_len={len(generated_b64) if generated_b64 else 0}",
+                flush=True,
+            )
             converted_jpg = await asyncio.to_thread(image_utils.convert_png_b64_to_jpg_b64, generated_b64)
             if converted_jpg:
                 data[output_key] = converted_jpg
@@ -197,6 +223,12 @@ class VanillaAgent(BaseAgent):
                 )
             else:
                 print(f"⚠️  Image generation returned no usable image for {output_key}")
+            _record_image_result(data, output_key)
+            print(
+                f"[Vanilla] output_image_keys={_image_result_keys(data)} "
+                f"written_key={output_key if data.get(output_key) else ''}",
+                flush=True,
+            )
         else:
             if response_list and response_list[0]:
                 raw_code = response_list[0]
@@ -206,6 +238,11 @@ class VanillaAgent(BaseAgent):
                 )
                 if base64_jpg:
                     data[output_key] = base64_jpg
+                    _record_image_result(data, output_key)
+                    print(
+                        f"[Vanilla] output_image_keys={_image_result_keys(data)} written_key={output_key}",
+                        flush=True,
+                    )
 
         return data
 

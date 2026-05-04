@@ -226,6 +226,15 @@ async def _call_gpt_image_2_http_async(model_name: str, prompt: str, config: Dic
                 flush=True,
             )
             logger.warning("[GPT Image] failed to decode b64_json: %s", exc)
+        print(
+            "[GPT Image] returning image field source=data[0].b64_json output=response_list[0] "
+            f"b64_len={len(b64_json.strip())}",
+            flush=True,
+        )
+        logger.info(
+            "[GPT Image] returning image field source=data[0].b64_json output=response_list[0] b64_len=%s",
+            len(b64_json.strip()),
+        )
         return [b64_json.strip()]
 
     print(f"[GPT Image] missing data[0].b64_json; response structure: {summary}", flush=True)

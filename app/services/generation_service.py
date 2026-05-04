@@ -80,6 +80,13 @@ async def process_parallel_candidates(
     async for result_data in processor.process_queries_batch(
         data_list, max_concurrent=max_concurrent, do_eval=False
     ):
+        print(
+            "[ResearchDrawing] generation_service result image fields: "
+            f"candidate_id={result_data.get('candidate_id')} "
+            f"eval_image_field={result_data.get('eval_image_field')} "
+            f"image_keys={_result_image_keys(result_data)}",
+            flush=True,
+        )
         results.append(result_data)
     return results
 
@@ -109,7 +116,24 @@ def run_parallel_candidates_sync(
 
 
 def _result_image_keys(result: dict[str, Any]) -> list[str]:
-    return sorted(key for key, value in result.items() if "base64" in key or key.endswith("_b64") or key.endswith("_b64_json"))
+    return sorted(
+        key
+        for key, value in result.items()
+        if value
+        and (
+            "base64" in key
+            or key.endswith("_b64")
+            or key.endswith("_b64_json")
+            or key in {"image", "image_base64"}
+        )
+    )
+
+
+def _image_b64_from_key(result: dict[str, Any], key: str | None) -> str | None:
+    if not key:
+        return None
+    value = result.get(key)
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def base64_to_image(b64_str: str) -> Image.Image | None:
@@ -140,19 +164,41 @@ def base64_to_image(b64_str: str) -> Image.Image | None:
 
 def extract_final_diagram_b64_from_result(result: dict[str, Any], exp_mode: str) -> str | None:
     task_name = "diagram"
+    eval_image_field = str(result.get("eval_image_field") or "").strip()
+    b64 = _image_b64_from_key(result, eval_image_field)
+    if b64:
+        print(f"[ResearchDrawing] selected image field={eval_image_field}", flush=True)
+        return b64
+
     for round_idx in range(3, -1, -1):
         image_key = f"target_{task_name}_critic_desc{round_idx}_base64_jpg"
-        if result.get(image_key):
-            return result[image_key]
-    if exp_mode == "demo_full":
-        sk = f"target_{task_name}_stylist_desc0_base64_jpg"
-        if result.get(sk):
-            return result[sk]
-    pk = f"target_{task_name}_desc0_base64_jpg"
-    return result.get(pk)
+        b64 = _image_b64_from_key(result, image_key)
+        if b64:
+            print(f"[ResearchDrawing] selected image field={image_key}", flush=True)
+            return b64
+
+    fallback_keys = [
+        f"target_{task_name}_stylist_desc0_base64_jpg",
+        f"target_{task_name}_desc0_base64_jpg",
+        f"vanilla_{task_name}_base64_jpg",
+        f"polished_{task_name}_base64_jpg",
+        "image_base64",
+        "image",
+    ]
+    for image_key in fallback_keys:
+        b64 = _image_b64_from_key(result, image_key)
+        if b64:
+            print(f"[ResearchDrawing] selected image field={image_key}", flush=True)
+            return b64
+    return None
 
 
 def result_image_to_png_bytes(result: dict[str, Any], exp_mode: str) -> bytes | None:
+    print(
+        "[ResearchDrawing] result_image_to_png_bytes detected "
+        f"image_keys={_result_image_keys(result)} eval_image_field={result.get('eval_image_field')}",
+        flush=True,
+    )
     b64 = extract_final_diagram_b64_from_result(result, exp_mode)
     if not b64:
         print(

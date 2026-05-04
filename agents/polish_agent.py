@@ -27,6 +27,27 @@ from utils import generation_utils, image_utils
 from .base_agent import BaseAgent
 
 
+def _image_result_keys(data: Dict[str, Any]) -> list[str]:
+    return sorted(
+        key
+        for key, value in data.items()
+        if value and ("base64" in key or key.endswith("_b64") or key.endswith("_b64_json") or key in {"image", "image_base64"})
+    )
+
+
+def _record_image_result(data: Dict[str, Any], output_key: str) -> None:
+    image_b64 = data.get(output_key)
+    if not image_b64:
+        return
+    data["image_base64"] = image_b64
+    data["image_field"] = output_key
+    print(
+        f"[Polish] recorded image field={output_key} generic_field=image_base64 "
+        f"b64_len={len(image_b64)}",
+        flush=True,
+    )
+
+
 def _load_image_as_base64(image_path: str) -> str:
     """Load an image from path and convert to base64"""
     try:
@@ -102,6 +123,7 @@ class PolishAgent(BaseAgent):
         """
         cfg = self.task_config
         task_name = cfg["task_name"]
+        print(f"[Polish] input_image_keys={_image_result_keys(data)}", flush=True)
         
         # Get GT image path and resolve relative path
         gt_image_path_rel = data.get("path_to_gt_image")
@@ -216,6 +238,11 @@ class PolishAgent(BaseAgent):
             if response_list and response_list[0]:
                 # Convert PNG to JPG
                 generated_b64 = response_list[0]
+                print(
+                    f"[Polish] model={self.image_gen_model_name} received_fields=response_list[0] "
+                    f"b64_len={len(generated_b64) if generated_b64 else 0}",
+                    flush=True,
+                )
                 converted_jpg = image_utils.convert_png_b64_to_jpg_b64(generated_b64)
                 if converted_jpg:
                     output_key = f"polished_{task_name}_base64_jpg"
@@ -229,11 +256,19 @@ class PolishAgent(BaseAgent):
                     )
                 else:
                     print(f"⚠️  Image generation returned Error")
+                if "output_key" in locals():
+                    _record_image_result(data, output_key)
+                print(
+                    f"[Polish] output_image_keys={_image_result_keys(data)} "
+                    f"written_key={output_key if 'output_key' in locals() and data.get(output_key) else ''}",
+                    flush=True,
+                )
             else:
                 print(f"⚠️  No response from model")
                 
         except Exception as e:
             print(f"❌ Error during image generation: {e}")
+        print(f"[Polish] final_output_image_keys={_image_result_keys(data)}", flush=True)
         
         return data
 

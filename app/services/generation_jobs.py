@@ -203,6 +203,20 @@ def _blank_png_bytes() -> bytes:
     return buf.getvalue()
 
 
+def _result_image_keys(result: dict[str, Any]) -> list[str]:
+    return sorted(
+        key
+        for key, value in result.items()
+        if value
+        and (
+            "base64" in key
+            or key.endswith("_b64")
+            or key.endswith("_b64_json")
+            or key in {"image", "image_base64"}
+        )
+    )
+
+
 def _cleanup_stale() -> None:
     now = time.time()
     with _lock:
@@ -274,13 +288,20 @@ def spawn_generation_job(
             job_dir = _job_dir(username, job_id)
             rows: list[dict[str, Any]] = []
             for i, r in enumerate(results):
+                image_keys = _result_image_keys(r)
+                print(
+                    "[ResearchDrawing] generation_jobs detected image_keys: "
+                    f"candidate_id={i} image_keys={image_keys} "
+                    f"eval_image_field={r.get('eval_image_field')}",
+                    flush=True,
+                )
                 # Convert candidate result to PNG immediately, so later UI/save/download never relies on base64/raw blobs.
                 png = result_image_to_png_bytes(r, exp_mode)
                 out_path = job_dir / f"candidate_{i}.png"
                 if not png:
                     print(
                         "[ResearchDrawing] candidate image empty before save: "
-                        f"candidate_id={i} save_path={out_path} result_keys={sorted(r.keys())}",
+                        f"candidate_id={i} save_path={out_path} result_keys={sorted(r.keys())} image_keys={image_keys}",
                         flush=True,
                     )
                     raise RuntimeError(f"candidate image empty: candidate_{i}")
