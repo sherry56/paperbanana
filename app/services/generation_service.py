@@ -16,6 +16,7 @@ from agents.stylist_agent import StylistAgent
 from agents.vanilla_agent import VanillaAgent
 from agents.visualizer_agent import VisualizerAgent
 from utils import config
+from utils.generation_utils import GPT_DIRECT_MODE_ERROR, is_gpt_model_name
 from utils.paperviz_processor import PaperVizProcessor
 
 DEFAULT_MAX_CONCURRENT = 10
@@ -51,10 +52,10 @@ async def process_parallel_candidates(
     retrieval_setting: str,
     main_model_name: str,
     image_gen_model_name: str,
-    gpt_api_key: str = "",
-    gpt_base_url: str = "",
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
 ) -> list[dict[str, Any]]:
+    if is_gpt_model_name(main_model_name) or is_gpt_model_name(image_gen_model_name):
+        raise ValueError(GPT_DIRECT_MODE_ERROR)
     exp_config = config.ExpConfig(
         dataset_name="Demo",
         split_name="demo",
@@ -62,8 +63,6 @@ async def process_parallel_candidates(
         retrieval_setting=retrieval_setting,
         main_model_name=main_model_name,
         image_gen_model_name=image_gen_model_name,
-        gpt_api_key=gpt_api_key,
-        gpt_base_url=gpt_base_url,
         work_dir=Path(__file__).resolve().parents[2],
     )
     processor = PaperVizProcessor(
@@ -97,8 +96,6 @@ def run_parallel_candidates_sync(
     retrieval_setting: str,
     main_model_name: str,
     image_gen_model_name: str,
-    gpt_api_key: str = "",
-    gpt_base_url: str = "",
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
 ) -> list[dict[str, Any]]:
     return asyncio.run(
@@ -108,8 +105,6 @@ def run_parallel_candidates_sync(
             retrieval_setting=retrieval_setting,
             main_model_name=main_model_name,
             image_gen_model_name=image_gen_model_name,
-            gpt_api_key=gpt_api_key,
-            gpt_base_url=gpt_base_url,
             max_concurrent=max_concurrent,
         )
     )

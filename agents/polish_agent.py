@@ -186,23 +186,9 @@ class PolishAgent(BaseAgent):
         # Generate polished image
         aspect_ratio = data.get("additional_info", {}).get("rounded_ratio", "16:9")
         try:
-            if "gpt-image" in self.image_gen_model_name:
-                image_config = {
-                    "size": "1536x1024",
-                    "quality": "high",
-                    "background": "opaque",
-                    "output_format": "png",
-                    "gpt_api_key": self.exp_config.gpt_api_key,
-                    "gpt_base_url": self.exp_config.gpt_base_url,
-                }
-                response_list = await generation_utils.call_openai_image_generation_with_retry_async(
-                    model_name=self.image_gen_model_name,
-                    prompt=user_prompt[:30000],
-                    config=image_config,
-                    max_attempts=5,
-                    retry_delay=30,
-                )
-            elif generation_utils.openrouter_client is not None:
+            if generation_utils.is_gpt_model_name(self.image_gen_model_name):
+                raise RuntimeError(generation_utils.GPT_DIRECT_MODE_ERROR)
+            if generation_utils.openrouter_client is not None:
                 image_config = {
                     "system_prompt": self.system_prompt,
                     "temperature": self.exp_config.temperature,

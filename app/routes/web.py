@@ -82,7 +82,7 @@ from app.services.user_service import (
 )
 from utils import user_gallery
 from utils.usage_tiers import TIER_ORDER, flatten_tier_for_demo, normalize_legacy_tier_mode, tier_label
-from utils.generation_utils import call_model_with_retry_async
+from utils.generation_utils import GPT_DIRECT_MODE_ERROR, is_gpt_model_name
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -282,69 +282,6 @@ def _try_sub2api_sso_login(request: Request, db: Session, token: str | None) -> 
         return False
     request.session["user"] = prof
     return True
-
-
-def _extract_markdown_only(text: str) -> str:
-    """
-    Best-effort: keep only the Markdown payload.
-    If the model wraps content in ```markdown ... ```, strip the fences.
-    """
-    if not text:
-        return ""
-    s = text.strip()
-    # Avoid adding a hard dependency on a specific output format.
-    import re
-
-    m = re.search(r"```(?:markdown)?\\s*\\n?(.*?)```", s, flags=re.S | re.I)
-    if m:
-        return (m.group(1) or "").strip()
-    return s
-
-
-def _optimize_method_content_with_gpt53(method_content: str) -> str:
-    """
-    Optimize "method_content" before candidate generation.
-    Uses OpenAI gpt-5.3 and returns only the Markdown result.
-    If OpenAI is not configured / fails, caller should fall back to original.
-    """
-    raw = (method_content or "").strip()
-    if not raw:
-        return method_content
-
-    system_prompt = "使用 Markdown；内容越聚焦，生成结果与论文一致性通常越好"
-    user_prompt = (
-        f"原始方法内容：\n{raw}\n\n"
-        "请仅返回优化后的 Markdown 内容本体，不要输出任何解释或前后缀。"
-    )
-
-    cfg = {
-        "system_prompt": system_prompt,
-        "temperature": 0.4,
-        "candidate_num": 1,
-        # Keep output bounded to avoid huge tokens.
-        "max_completion_tokens": 2000,
-    }
-    contents = [{"type": "text", "text": user_prompt}]
-
-    # generate_submit is a sync route; use asyncio.run to call async OpenAI client.
-    import asyncio
-
-    model_name = "gpt-5.3"
-    res_list = asyncio.run(
-        call_model_with_retry_async(
-            model_name=model_name,
-            contents=contents,
-            config=cfg,
-            max_attempts=3,
-            retry_delay=8,
-            error_context="optimize_method_content",
-        )
-    )
-    if not res_list:
-        return method_content
-    optimized = res_list[0] if isinstance(res_list, list) else str(res_list)
-    optimized_md = _extract_markdown_only(optimized)
-    return optimized_md or method_content
 
 
 def _render_template(request: Request, name: str, context: dict[str, Any]):
@@ -808,8 +745,6 @@ def generate_submit(
         ctx["generation_unit_price"] = get_generation_unit_price_yuan(db)
         return _render_template(request, "index.html", ctx)
 
-    # Business optimization (optional):
-    # If the user selected optimization, call OpenAI gpt-5.3 to return only markdown.
     want_opt = str(optimize_method_content).strip() in {"1", "true", "yes", "on"}
     allow_opt = bool(user.get("role") == ROLE_ADMIN or user.get("can_optimize_method"))
     if want_opt and not allow_opt:
@@ -817,12 +752,6 @@ def generate_submit(
         ctx = _index_context(user, tier_templates, error=msg, db=db)
         ctx["generation_unit_price"] = get_generation_unit_price_yuan(db)
         return _render_template(request, "index.html", ctx)
-    if want_opt and allow_opt:
-        try:
-            method_content = _optimize_method_content_with_gpt53(method_content)
-        except Exception:
-            # Avoid breaking generation if the optional optimization layer fails.
-            pass
 
     # Idempotency / de-dup:
     # If the client retries POST /generate while a job is already running/done/error,
@@ -862,9 +791,11 @@ def generate_submit(
         main_model_name = cfg.get("main_model_name", main_model_name)
         image_gen_model_name = cfg.get("image_gen_model_name", image_gen_model_name)
     main_model_name = (main_model_name or "").strip()
-    if main_model_name in {"gpt5.5", "openrouter/openai/gpt-5.5"}:
-        main_model_name = "gpt-5.5"
     image_gen_model_name = (image_gen_model_name or "").strip()
+    if is_gpt_model_name(main_model_name) or is_gpt_model_name(image_gen_model_name):
+        ctx = _index_context(user, tier_templates, error=GPT_DIRECT_MODE_ERROR, db=db)
+        ctx["generation_unit_price"] = get_generation_unit_price_yuan(db)
+        return _render_template(request, "index.html", ctx)
     need = max(1, int(num_candidates)) * (1 + max(1, int(max_critic_rounds)))
     ok_quota, msg_quota = consume_user_generation_quota(db, user["username"], need)
     if not ok_quota:
@@ -909,13 +840,6 @@ async def sub2api_generate(request: Request):
     method_content = str(payload.get("method_content") or "").strip()
     if not method_content:
         return JSONResponse({"ok": False, "error": "method_content is required"}, status_code=400)
-    want_opt = str(payload.get("optimize_method_content") or "").strip().lower() in {"1", "true", "yes", "on"}
-    if want_opt:
-        try:
-            method_content = _optimize_method_content_with_gpt53(method_content)
-        except Exception:
-            # Keep the service endpoint available even if the optional optimization layer fails.
-            pass
 
     caption = str(payload.get("caption") or "")
     exp_mode = str(payload.get("exp_mode") or "demo_planner_critic").strip() or "demo_planner_critic"
@@ -936,11 +860,9 @@ async def sub2api_generate(request: Request):
     except Exception:
         max_critic_rounds = 3
     main_model_name = str(payload.get("main_model_name") or "").strip()
-    if main_model_name in {"gpt5.5", "openrouter/openai/gpt-5.5"}:
-        main_model_name = "gpt-5.5"
     image_gen_model_name = str(payload.get("image_gen_model_name") or "").strip()
-    gpt_api_key = str(payload.get("gpt_api_key") or "").strip()
-    gpt_base_url = str(payload.get("gpt_base_url") or "").strip().rstrip("/")
+    if is_gpt_model_name(main_model_name) or is_gpt_model_name(image_gen_model_name):
+        return JSONResponse({"ok": False, "error": GPT_DIRECT_MODE_ERROR}, status_code=400)
     quota_need = max(1, int(num_candidates)) * (1 + max(1, int(max_critic_rounds)))
 
     data_list = create_sample_inputs(
@@ -958,8 +880,6 @@ async def sub2api_generate(request: Request):
         main_model_name=main_model_name,
         image_gen_model_name=image_gen_model_name,
         quota_need=quota_need,
-        gpt_api_key=gpt_api_key,
-        gpt_base_url=gpt_base_url,
     )
     return JSONResponse(
         {

@@ -27,7 +27,8 @@ from prompts import diagram_eval_prompts, plot_eval_prompts
 from utils.generation_utils import (
     call_gemini_with_retry_async,
     call_claude_with_retry_async,
-    call_openai_with_retry_async,
+    GPT_DIRECT_MODE_ERROR,
+    is_gpt_model_name,
 )
 
 # Prompt mapping: task_name -> eval_dim -> system_prompt
@@ -178,19 +179,8 @@ async def _run_single_eval_ref(
                     max_output_tokens=50000,
                 ),
             )
-        elif "gpt" in model_name or "o1" in model_name or "o3" in model_name:
-            response_text_list = await call_openai_with_retry_async(
-                model_name=model_name,
-                contents=content_list,
-                config={
-                    "system_prompt": sys_prompt,
-                    "temperature": 1,
-                    "candidate_num": 1,
-                    "max_completion_tokens": 10000,
-                },
-                max_attempts=5,
-                retry_delay=30,
-            )
+        elif is_gpt_model_name(model_name):
+            raise RuntimeError(GPT_DIRECT_MODE_ERROR)
         else:
             response_text_list = await call_claude_with_retry_async(
                 model_name=model_name,
